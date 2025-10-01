@@ -57,8 +57,6 @@ hayInterseccion (amin, amax) (bmin, bmax) = firstCase || secondCase
 rangoProyectado :: [Point] -> Vector -> Scalar2D
 rangoProyectado p v = (minimum proyecciones, maximum proyecciones)
     where proyecciones = [Geometry.dot px v | px <- p]
-rangoProyectado p v = (minimum proyecciones, maximum proyecciones)
-    where proyecciones = [Geometry.dot px v | px <- p]
 
 -- detectRobotProjectileCollisions: Verifica qué proyectiles han colisionado con algún agente. Cuando detecte una colisión, debe generar el evento de colisión correspondiente.
 detectRobotProjectileCollisions :: [Projectile] -> [Robot] -> [RobotProjectileCollisionEvent]
