@@ -1,9 +1,5 @@
 {-# OPTIONS_GHC -Wall #-} -- Advertencias adicionales
 
-import qualified Geometry
-import Entities
-import Entities.Robot
-
 module Collisions (
     checkCollision,
     detectRobotProyectileCollisions,
@@ -13,19 +9,25 @@ module Collisions (
     vectorPerpendicular
 ) where
 
+import qualified Geometry
+import Entities
+import Entities.Robot
+
 class CollisionEvent a where
     -- handleCollision controla la colisión
     handleCollision :: a -> Bool
 
 data RobotProjectileCollisionEvent = RobProjColl
-{
-
-} deriving (Show, Eq)
+    {
+        -- Temporal
+        robotInProjColl :: Robot
+    } deriving (Show, Eq)
 
 data RobotRobotCollisionEvent = RobRobColl
-{
-
-} deriving (Show, Eq)
+    {
+        -- Temporal
+        robotInColl1 :: Robot
+    } deriving (Show, Eq)
 
 
 
@@ -37,23 +39,24 @@ data RobotRobotCollisionEvent = RobRobColl
 
 -- checkCollision: Comprueba si dos rectángulos han colisionado utilizando el algoritmo apropiado.
 checkCollision :: [Point] -> [Point] -> Bool
-checkCollision ra rb = null dropWhile (==False) [hayInterseccion rangoA rangoB | (rangoA, rangoB) <- zip rangosPorVertA rangosPorVertB]
+checkCollision ra rb = any (==False) [hayInterseccion rangoA rangoB | (rangoA, rangoB) <- zip rangosPorVertA rangosPorVertB]
     where
         vPerps = obtenVPerp ra ++ obtenVPerp rb
         rangosPorVertA = [rangoProyectado ra v | v <- vPerps]
         rangosPorVertB = [rangoProyectado rb v | v <- vPerps]
 
+-- Calcula el vector perpendicular a las aristas del polígono definido por [Point]
 obtenVPerp :: [Point] -> [Vector]
-obtenVPerp ps = [Geometry.perp (Geometry.sub p1 p2) | (p1, p2) <- zip ps (tail ps ++ [head ps])]
+obtenVPerp ps = [Geometry.perp (Geometry.sub p2 p1) | (p1, p2) <- zip ps (tail ps ++ [head ps])]
 
--- Comprueba si dos rangos intersectan. Hacer all sobre todos ellos para ver si hay huecos.
+-- Comprueba si dos rangos intersecan. Hacer any sobre todos ellos para ver si hay huecos.
 hayInterseccion :: Scalar2D -> Scalar2D -> Bool
 hayInterseccion (amin, amax) (bmin, bmax) = firstCase || secondCase
     where
         firstCase = amin < bmax && amin > bmin
         secondCase = bmin < amax && bmin > amin
     
--- Consigue el rango proyectado por un polígono en un vector
+-- Consigue el rango proyectado por un polígono sobre un vector
 rangoProyectado :: [Point] -> Vector -> Scalar2D
 rangoProyectado p v = (minimum proyecciones, maximum proyecciones)
     where proyecciones = [Geometry.dot px v | px <- p]
