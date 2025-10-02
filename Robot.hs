@@ -1,8 +1,6 @@
 {-# OPTIONS_GHC -Wall #-} -- Advertencias adicionales
-import Geometry
-import qualified Data.Map as Map
 
-module Entities.Robot (
+module Robot (
     Robot,
     MovementAction,
     detectedAgent,
@@ -12,6 +10,9 @@ module Entities.Robot (
     updateVelocity,
     updatePosition
 ) where
+import Entities
+import Geometry
+import qualified Data.Map as Map
 
 data Robot = Rob
   { robotSize  :: Size, 
