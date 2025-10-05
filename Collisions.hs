@@ -16,7 +16,7 @@ import Geometry
 import Entities (Projectile(..))
 import Robot (Robot(..))
 
--- Reemplaza los 'data' por type synonyms:
+-- Eventos de colisión con type
 type RobotProjectileCollisionEvent = (Projectile, Robot)
 type RobotRobotCollisionEvent      = (Robot, Robot)
 
