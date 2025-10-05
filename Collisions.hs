@@ -12,7 +12,7 @@ module Collisions
 import Geometry
   (Scalar2D, Point, Vector
   , dot, sub, perp )
-  
+
 import Entities (Projectile(..))
 import Robot (Robot(..))
 
@@ -31,13 +31,13 @@ type RobotRobotCollisionEvent      = (Robot, Robot)
 -- checkCollision: Comprueba si dos rectángulos han colisionado utilizando el algoritmo apropiado.
 -- all id significa que todos los elementos de la lista son True
 checkCollision :: [Point] -> [Point] -> Bool
-checkCollision ra rb =
-  not (null ra) && not (null rb) &&
-  all id [ hayInterseccion a b | (a,b) <- zip rangosA rangosB ]
-  where
-    vPerps  = obtenVPerp ra ++ obtenVPerp rb
-    rangosA = [rangoProyectado ra v | v <- vPerps]
-    rangosB = [rangoProyectado rb v | v <- vPerps]
+checkCollision [] _ = error "El primer polígono no debe estar vacío"
+checkCollision _ [] = error "El segundo polígono no debe estar vacío"
+checkCollision ra rb = and [ hayInterseccion a b | (a,b) <- zip rangosA rangosB ]
+    where
+        vPerps  = obtenVPerp ra ++ obtenVPerp rb
+        rangosA = [rangoProyectado ra v | v <- vPerps]
+        rangosB = [rangoProyectado rb v | v <- vPerps]
 
 
 -- Calcula el vector perpendicular a las aristas del polígono definido por [Point]
@@ -47,7 +47,7 @@ obtenVPerp ps = [perp (sub p2 p1) | (p1, p2) <- zip ps (tail ps ++ [head ps])]
 -- Comprueba si dos rangos intersecan. Hacer any sobre todos ellos para ver si hay huecos.
 hayInterseccion :: (Double, Double) -> (Double, Double) -> Bool
 hayInterseccion (amin, amax) (bmin, bmax) = not (amax < bmin || bmax < amin)
-    
+
 -- Consigue el rango proyectado por un polígono sobre un vector
 rangoProyectado :: [Point] -> Vector -> Scalar2D
 rangoProyectado p v = (minimum proyecciones, maximum proyecciones)
@@ -68,7 +68,7 @@ detectRobotProjectileCollisions ps rs =
 -- Empareja robots una sola vez (i < j) y devuelve las tuplas (Robot, Robot) que colisionan.
 detectRobotRobotCollisions :: [Robot] -> [RobotRobotCollisionEvent]
 detectRobotRobotCollisions []     = []
-detectRobotRobotCollisions (r:rs) = 
+detectRobotRobotCollisions (r:rs) =
   colisionesConR r rs ++ detectRobotRobotCollisions rs
   where
     -- Compara el robot r con cada robot del resto de la lista
