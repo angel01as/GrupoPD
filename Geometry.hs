@@ -1,16 +1,13 @@
 {-# OPTIONS_GHC -Wall #-} -- Advertencias adicionales
 
-module Geometry (
-    Scalar, Scalar2D, Point, Vector, Angle, Distance, Position, Size,
-    distanceBetween, angleToTarget, deg2rad, rad2deg, subVec, getVertices, dot, sub, perp,
-    isInBounds, mul, add2D, sub2D, prodByScalar, angleFactor
-) where
+module Geometry where
 
 -- Escala base (Float) para todo
 type Scalar   = Double
 type Scalar2D = (Scalar, Scalar)
 type Point    = Scalar2D   -- Un punto 2D en el espacio. SR: {(0,0);(1,0),(0,1)}
 type Vector   = Scalar2D   -- Vector siempre se considera que empieza en (0,0)
+type Velocity = Vector
 type Angle    = Scalar           -- Un ángulo con decimales. Puede ser grados o radianes, positivo y negativo.
 type Distance = Scalar             -- Un valor de distancia con decimales.
 type Position = Point             -- Representa la posición de objeto en un mundo 2D.
@@ -37,17 +34,14 @@ rad2deg a = a * 180 / pi
 subVec :: Vector -> Vector -> Vector
 subVec (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
 
--- Genera una lista de vértices (puntos) a partir de cuatro puntos base y un ángulo de rotación.
-getVertices :: (Point, Point, Point, Point, Angle) -> [Point]
-getVertices (p1, p2, p3, p4, theta) = map (rotarCentro theta centro) [p1, p2, p3, p4]
+-- Genera una lista de vértices (puntos) a partir de puntos base y un ángulo de rotación.
+rotateVertices :: [Point] -> Angle -> [Point]
+rotateVertices ps theta = map (rotarCentro theta centro) ps
   where
     centro :: Point
-    centro = ((x1 + x2 + x3 + x4) / 4 , (y1 + y2 + y3 + y4) / 4)
+    centro = prodByScalar (1/numPts) (foldr1 add2D ps)
       where
-        (x1, y1) = p1
-        (x2, y2) = p2
-        (x3, y3) = p3
-        (x4, y4) = p4
+        numPts = fromIntegral $ length ps
 
     rotarCentro :: Angle -> Point -> Point -> Point
     rotarCentro t (cx, cy) (x, y) =
@@ -58,6 +52,10 @@ getVertices (p1, p2, p3, p4, theta) = map (rotarCentro theta centro) [p1, p2, p3
           x' = dx * c - dy * s
           y' = dx * s + dy * c
       in (x' + cx, y' + cy)
+
+-- Aplica una traslación a una lista de vértices (puntos)
+translateVertices :: [Point] -> Vector -> [Point]
+translateVertices ps vec = map (add2D vec) ps
 
 -- Calcula el producto escalar (dot product) entre dos puntos tratados como vectores
 dot :: Vector -> Vector -> Scalar
