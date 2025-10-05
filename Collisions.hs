@@ -10,7 +10,7 @@ module Collisions
   ) where
 
 import Geometry
-  (Scalar, Scalar2D, Point, Vector
+  (Scalar2D, Point, Vector
   , dot, sub, perp )
   
 import Entities (Projectile(..))
@@ -45,11 +45,8 @@ obtenVPerp :: [Point] -> [Vector]
 obtenVPerp ps = [perp (sub p2 p1) | (p1, p2) <- zip ps (tail ps ++ [head ps])]
 
 -- Comprueba si dos rangos intersecan. Hacer any sobre todos ellos para ver si hay huecos.
-hayInterseccion :: Scalar2D -> Scalar2D -> Bool
-hayInterseccion (amin, amax) (bmin, bmax) = firstCase || secondCase
-    where
-        firstCase = amin < bmax && amin > bmin
-        secondCase = bmin < amax && bmin > amin
+hayInterseccion :: (Double, Double) -> (Double, Double) -> Bool
+hayInterseccion (amin, amax) (bmin, bmax) = not (amax < bmin || bmax < amin)
     
 -- Consigue el rango proyectado por un polígono sobre un vector
 rangoProyectado :: [Point] -> Vector -> Scalar2D
