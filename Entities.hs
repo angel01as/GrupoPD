@@ -3,7 +3,7 @@
 module Entities (
   -- Con tipo data(..) se exporta todo lo que tiene, constructor incluido.
   GameEntity(..), 
-  Stage(..), Statistics(..), Projectile(..),
+  Stage(..), Statistics(..), Projectile(..)
 ) where
 
 import Geometry (Size, Position, Scalar, Angle, Point, Velocity, add2D, prodByScalar, rotateVertices, translateVertices)

@@ -1,24 +1,24 @@
-{-# OPTIONS_GHC -Wall #-} -- Advertencias adicionales
+{-# OPTIONS_GHC -Wall #-}
 
-module Collisions (
-    checkCollisions
-) where
+module Collisions
+  ( checkCollision
+  , detectRobotProjectileCollisions
+  , detectRobotRobotCollisions
+  , checkCollisions
+  , RobotProjectileCollisionEvent
+  , RobotRobotCollisionEvent
+  ) where
 
 import Geometry
-import Entities
-import Robot
+  (Scalar, Scalar2D, Point, Vector
+  , dot, sub, perp )
+  
+import Entities (Projectile(..))
+import Robot (Robot(..))
 
-data RobotProjectileCollisionEvent = RobProjColl
-    {
-        -- Temporal
-        robotInProjColl :: Robot
-    } deriving (Show, Eq)
-
-data RobotRobotCollisionEvent = RobRobColl
-    {
-        -- Temporal
-        robotInColl1 :: Robot
-    } deriving (Show, Eq)
+-- Reemplaza los 'data' por type synonyms:
+type RobotProjectileCollisionEvent = (Projectile, Robot)
+type RobotRobotCollisionEvent      = (Robot, Robot)
 
 
 
@@ -29,12 +29,16 @@ data RobotRobotCollisionEvent = RobRobColl
 -- Comprobar el cruce de los rangos del minimo al maximo de cada poligono, si en uno de estos NO hay cruce, no colisionan
 
 -- checkCollision: Comprueba si dos rectángulos han colisionado utilizando el algoritmo apropiado.
+-- all id significa que todos los elementos de la lista son True
 checkCollision :: [Point] -> [Point] -> Bool
-checkCollision ra rb = any (==False) [hayInterseccion rangoA rangoB | (rangoA, rangoB) <- zip rangosPorVertA rangosPorVertB]
-    where
-        vPerps = obtenVPerp ra ++ obtenVPerp rb
-        rangosPorVertA = [rangoProyectado ra v | v <- vPerps]
-        rangosPorVertB = [rangoProyectado rb v | v <- vPerps]
+checkCollision ra rb =
+  not (null ra) && not (null rb) &&
+  all id [ hayInterseccion a b | (a,b) <- zip rangosA rangosB ]
+  where
+    vPerps  = obtenVPerp ra ++ obtenVPerp rb
+    rangosA = [rangoProyectado ra v | v <- vPerps]
+    rangosB = [rangoProyectado rb v | v <- vPerps]
+
 
 -- Calcula el vector perpendicular a las aristas del polígono definido por [Point]
 obtenVPerp :: [Point] -> [Vector]
@@ -53,12 +57,29 @@ rangoProyectado p v = (minimum proyecciones, maximum proyecciones)
     where proyecciones = [dot px v | px <- p]
 
 -- detectRobotProjectileCollisions: Verifica qué proyectiles han colisionado con algún agente. Cuando detecte una colisión, debe generar el evento de colisión correspondiente.
+-- Detección de colisiones Proyectil–Robot:
+-- Devuelve una lista de tuplas (Projectile, Robot) que colisionan.
 detectRobotProjectileCollisions :: [Projectile] -> [Robot] -> [RobotProjectileCollisionEvent]
-detectRobotProjectileCollisions ps rs = []
+detectRobotProjectileCollisions ps rs =
+  [ (p, r)
+  | p <- ps
+  , r <- rs
+  , checkCollision (projectileVertices p) (robotVertices r)
+  ]
 
--- detectRobotRobotCollisions: Comprueba y detecta las colisiones entre los diferentes robots del juego. Deberá generar el evento de colisión correspondiente.
+-- Detección de colisiones Robot–Robot:
+-- Empareja robots una sola vez (i < j) y devuelve las tuplas (Robot, Robot) que colisionan.
 detectRobotRobotCollisions :: [Robot] -> [RobotRobotCollisionEvent]
-detectRobotRobotCollisions rs = []
+detectRobotRobotCollisions []     = []
+detectRobotRobotCollisions (r:rs) = 
+  colisionesConR r rs ++ detectRobotRobotCollisions rs
+  where
+    -- Compara el robot r con cada robot del resto de la lista
+    colisionesConR :: Robot -> [Robot] -> [RobotRobotCollisionEvent]
+    colisionesConR _ [] = []
+    colisionesConR a (b:bs)
+      | checkCollision (robotVertices a) (robotVertices b) = (a, b) : colisionesConR a bs
+      | otherwise                                          = colisionesConR a bs
 
 -- checkCollisions: Función principal que coordina todas las comprobaciones de colisión.
 checkCollisions :: [Robot] -> [Projectile] -> ([Robot], [Projectile])
