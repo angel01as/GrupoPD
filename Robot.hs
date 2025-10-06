@@ -5,6 +5,7 @@ module Robot (
   Robot(..),
   Turret(..),
   MovementAction(..),
+  MemoryValue(..),
   detectedAgent,
   isRobotAlive,
   countActiveRobots,
