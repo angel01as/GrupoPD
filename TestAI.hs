@@ -6,7 +6,7 @@ import qualified Data.Map as Map
 import Geometry (Point)
 import Entities (Projectile(..))
 import Robot (Robot(..), Turret(..), MovementAction(..))
-import AI (GameState(..), exampleBot, aggressiveBot, defensiveBot, executeBotAction, BotCommand(..))
+import AI (GameState(..), exampleBot, aggressiveBot, defensiveBot, decideBotBehavior, BotCommand(..))
 
 -- Construye un rectángulo axis-aligned de 2x2 centrado en (cx, cy)
 rect2x2 :: (Double, Double) -> [Point]
@@ -83,28 +83,28 @@ main = do
   putStrLn "\n1. ROBOT AGRESIVO:"
   putStrLn "   Robot en (0,0) con enemigo en (3,0)"
   let gs1 = mkGameState [robot1, robot3] projectiles
-      (updatedRobot1, commands1) = executeBotAction aggressiveBot gs1 robot1
+      commands1 = decideBotBehavior aggressiveBot gs1 robot1
   putStrLn $ "   Comandos generados: " ++ showCommands commands1
-  putStrLn $ "   Energía del robot: " ++ show (robotEnergy updatedRobot1)
+  putStrLn $ "   Energía del robot: " ++ show (robotEnergy robot1)
   
   putStrLn "\n2. ROBOT DEFENSIVO:"
   putStrLn "   Robot con poca energía (20) y bajo ataque"
   let lowEnergyRobot = robot1 { robotEnergy = 20 }
       gs2 = mkGameState [lowEnergyRobot, robot3] projectiles
-      (updatedRobot2, commands2) = executeBotAction defensiveBot gs2 lowEnergyRobot
+      commands2 = decideBotBehavior defensiveBot gs2 lowEnergyRobot
   putStrLn $ "   Comandos generados: " ++ showCommands commands2
-  putStrLn $ "   Energía del robot: " ++ show (robotEnergy updatedRobot2)
+  putStrLn $ "   Energía del robot: " ++ show (robotEnergy lowEnergyRobot)
   
   putStrLn "\n3. ROBOT INTELIGENTE (EJEMPLO):"
   putStrLn "   Robot que usa memoria para tomar decisiones"
   let gs3 = mkGameState [robot1, robot2] []
-      (updatedRobot3, commands3) = executeBotAction exampleBot gs3 robot1
+      commands3 = decideBotBehavior exampleBot gs3 robot1
   putStrLn $ "   Comandos generados: " ++ showCommands commands3
-  putStrLn $ "   Memoria del robot: " ++ show (robotMemory updatedRobot3)
+  putStrLn $ "   Memoria del robot: " ++ show (robotMemory robot1)
   
   putStrLn "\n4. PRUEBA DE CONDICIONES:"
   let gs4 = mkGameState [robot1, robot3] projectiles
-      (updatedRobot4, commands4) = executeBotAction exampleBot gs4 robot1
+      commands4 = decideBotBehavior exampleBot gs4 robot1
   putStrLn $ "   Con enemigo cercano y proyectil: " ++ showCommands commands4
   
   putStrLn "\n=== FIN DE LA DEMOSTRACIÓN ==="
