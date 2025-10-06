@@ -79,5 +79,5 @@ detectRobotRobotCollisions (r:rs) =
       | otherwise                                          = colisionesConR a bs
 
 -- checkCollisions: Función principal que coordina todas las comprobaciones de colisión.
-checkCollisions :: [Robot] -> [Projectile] -> ([Robot], [Projectile])
-checkCollisions rs ps = (rs, ps)
+checkCollisions :: [Robot] -> [Projectile] -> ([RobotProjectileCollisionEvent], [RobotRobotCollisionEvent])
+checkCollisions rs ps = (detectRobotProjectileCollisions ps rs, detectRobotRobotCollisions rs)
