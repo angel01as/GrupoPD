@@ -52,14 +52,14 @@ mkGameState robots projectiles = GameState
 
 -- Función para mostrar comandos de forma legible
 showCommand :: BotCommand -> String
-showCommand (MovementCmd (MoveForward speed)) = "MoverAdelante(" ++ show speed ++ ")"
-showCommand (MovementCmd (MoveBackward speed)) = "MoverAtras(" ++ show speed ++ ")"
-showCommand (MovementCmd (Rotate angle)) = "Rotar(" ++ show angle ++ ")"
-showCommand (MovementCmd (MultiplyVelocity factor)) = "MultiplicarVelocidad(" ++ show factor ++ ")"
-showCommand ShootCmd = "Disparar"
-showCommand (WaitCmd time) = "Esperar(" ++ show time ++ ")"
-showCommand (SetMemoryCmd key value) = "GuardarMemoria(" ++ key ++ ", " ++ show value ++ ")"
-showCommand (ClearMemoryCmd key) = "LimpiarMemoria(" ++ key ++ ")"
+showCommand (MovementCommand (MoveForward speed)) = "MoverAdelante(" ++ show speed ++ ")"
+showCommand (MovementCommand (MoveBackward speed)) = "MoverAtras(" ++ show speed ++ ")"
+showCommand (MovementCommand (Rotate angle)) = "Rotar(" ++ show angle ++ ")"
+showCommand (MovementCommand (MultiplyVelocity factor)) = "MultiplicarVelocidad(" ++ show factor ++ ")"
+showCommand ShootCommand = "Disparar"
+showCommand (WaitCommand time) = "Esperar(" ++ show time ++ ")"
+showCommand (SetMemoryCommand key value) = "GuardarMemoria(" ++ key ++ ", " ++ show value ++ ")"
+showCommand (ClearMemoryCommand key) = "LimpiarMemoria(" ++ key ++ ")"
 
 -- Función para mostrar lista de comandos
 showCommands :: [BotCommand] -> String

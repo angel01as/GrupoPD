@@ -38,11 +38,11 @@ data GameState = GameState
 
 -- Comandos básicos que puede ejecutar un bot
 data BotCommand
-  = MovementCmd MovementAction  -- Comando de movimiento 
-  | ShootCmd                    -- Disparar
-  | WaitCmd Scalar              -- Esperar un tiempo
-  | SetMemoryCmd String MemoryValue  -- Guardar valor en memoria
-  | ClearMemoryCmd String       -- Limpiar memoria
+  = MovementCommand MovementAction  -- Comando de movimiento 
+  | ShootCommand                    -- Disparar
+  | WaitCommand Scalar              -- Esperar un tiempo
+  | SetMemoryCommand String MemoryValue  -- Guardar valor en memoria
+  | ClearMemoryCommand String       -- Limpiar memoria
   deriving (Show, Eq)
 
 -- Condiciones que puede evaluar un bot
@@ -74,32 +74,32 @@ type BotBehavior = GameState -> Robot -> BotInstruction
 
 -- Comandos básicos
 move :: Scalar -> BotInstruction
-move speed = Simple (MovementCmd (MoveForward speed))
+move speed = Simple (MovementCommand (MoveForward speed))
 
 moveBackward :: Scalar -> BotInstruction
-moveBackward speed = Simple (MovementCmd (MoveBackward speed))
+moveBackward speed = Simple (MovementCommand (MoveBackward speed))
 
 rotate :: Angle -> BotInstruction
-rotate angle = Simple (MovementCmd (Rotate angle))
+rotate angle = Simple (MovementCommand (Rotate angle))
 
 multiplyVelocity :: Scalar -> BotInstruction
-multiplyVelocity factor = Simple (MovementCmd (MultiplyVelocity factor))
+multiplyVelocity factor = Simple (MovementCommand (MultiplyVelocity factor))
 
 shoot :: BotInstruction
-shoot = Simple ShootCmd
+shoot = Simple ShootCommand
 
 wait :: Scalar -> BotInstruction
-wait time = Simple (WaitCmd time)
+wait time = Simple (WaitCommand time)
 
 setMemory :: String -> MemoryValue -> BotInstruction
-setMemory key value = Simple (SetMemoryCmd key value)
+setMemory key value = Simple (SetMemoryCommand key value)
 
 clearMemory :: String -> BotInstruction
-clearMemory key = Simple (ClearMemoryCmd key)
+clearMemory key = Simple (ClearMemoryCommand key)
 
 -- Combinadores de instrucciones
 ifThen :: BotCondition -> BotInstruction -> BotInstruction
-ifThen cond instruction = Conditional cond instruction (Simple (WaitCmd 0))
+ifThen cond instruction = Conditional cond instruction (Simple (WaitCommand 0))
 
 ifThenElse :: BotCondition -> BotInstruction -> BotInstruction -> BotInstruction
 ifThenElse = Conditional
