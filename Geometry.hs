@@ -3,7 +3,7 @@
 module Geometry where
 
 -- Escala base (Float) para todo
-type Scalar   = Double
+type Scalar   = Float
 type Scalar2D = (Scalar, Scalar)
 type Point    = Scalar2D   -- Un punto 2D en el espacio. SR: {(0,0);(1,0),(0,1)}
 type Vector   = Scalar2D   -- Vector siempre se considera que empieza en (0,0)
