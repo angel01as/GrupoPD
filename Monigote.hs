@@ -145,7 +145,7 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
         monigotePosPoint =
           let (x, y) = monigotePosition estado
           in Translate (meter2Pixel x) (meter2Pixel y) $
-               ThickCircle 5 5
+              ThickCircle 5 5
 
         -- === DIBUJO DEL MONIGOTE (cabeza + tronco + brazos + piernas) ===
         -- Origen en los "pies": (x,y) en metros es la base del personaje.
@@ -189,10 +189,10 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
                     eyeOffsetX = headR * 0.45
                     eyeOffsetY = headR * 0.15
                 in Pictures
-                     [ Color (makeColorI 230 200 170 255) $ circleSolid headR
-                     , Translate (-eyeOffsetX) eyeOffsetY $ Color black $ circleSolid eyeR
-                     , Translate (  eyeOffsetX) eyeOffsetY $ Color black $ circleSolid eyeR
-                     ]
+                    [ Color (makeColorI 230 200 170 255) $ circleSolid headR
+                    , Translate (-eyeOffsetX) eyeOffsetY $ Color black $ circleSolid eyeR
+                    , Translate (  eyeOffsetX) eyeOffsetY $ Color black $ circleSolid eyeR
+                    ]
 
             -- Tronco (rectángulo)
             torso =
@@ -225,7 +225,7 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
       applyPhisics $
         foldr
           (\(condition, effect) gameState ->
-             if condition gameState then effect gameState else gameState
+            if condition gameState then effect gameState else gameState
           )
           currentState
           conditions
@@ -250,14 +250,12 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
             else state { monigoteVelocity = (0, 10), monigoteInAir = True }
 
         goRight :: MonigoteGameState -> MonigoteGameState
-        goRight state =
-          let (_, vy) = monigoteVelocity state
-          in state { monigoteVelocity = (10, vy) }
+        goRight state = state { monigoteVelocity = (10, vy) }
+          where (_, vy) = monigoteVelocity state
 
         goLeft :: MonigoteGameState -> MonigoteGameState
-        goLeft state =
-          let (_, vy) = monigoteVelocity state
-          in state { monigoteVelocity = (-10, vy) }
+        goLeft state = state { monigoteVelocity = (-10, vy) }
+          where (_, vy) = monigoteVelocity state
 
         applyPhisics :: MonigoteGameState -> MonigoteGameState
         applyPhisics state =
@@ -293,10 +291,9 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
 
             -- Avance de fase de caminata
             moving            = abs newVX > 0.3
-            onGroundNow       = newY == floorY
             freq              = 3 + min 2 (abs newVX)
             newAnimationWalk =
-              if onGroundNow && moving
+              if not (monigoteInAir state) && moving
                 then monigoteAnimationWalk state + deltaTime * realToFrac freq
                 else monigoteAnimationWalk state
 
