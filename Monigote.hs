@@ -8,16 +8,20 @@ import Geometry (Size, Position, Velocity, add2D, Scalar, Scalar2D)
 import Data.Maybe (fromMaybe, isNothing)
 
 data MonigoteGameState = MonigoteGameState
-  { monigoteKeysPressed   :: Sets.Set Key
-  , monigotePosition      :: Position   -- m
-  , monigoteVelocity      :: Velocity   -- m/s
-  , monigoteWindowSize    :: (Int, Int)
-  , monigoteInAir         :: Bool
-  , monigoteHeight        :: Scalar     -- m
-  , monigoteWidth         :: Scalar     -- m
-  , monigoteAnimationWalk :: Float      -- fase de caminata para animar las piernas
+  { 
+    monigoteKeysPressed   :: Sets.Set Key,
+    monigotePosition      :: Position,   -- m
+    monigoteVelocity      :: Velocity,   -- m/s
+    monigoteWindowSize    :: (Int, Int),
+    monigoteInAir         :: Bool,
+    monigoteHeight        :: Scalar,     -- m
+    monigoteWidth         :: Scalar,     -- m
+    monigoteAnimationWalk :: Float,      -- fase de caminata para animar las piernas
+    monigoteOrientation :: Orientation
   }
   deriving (Show, Eq)
+
+data Orientation = LeftFacing | RightFacing deriving (Show, Eq)
 
 -- Show personalizado para Set
 showSet :: (Show a) => Sets.Set a -> String
@@ -93,21 +97,23 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
     fps = 60
     estadoInicial =
       MonigoteGameState
-        { monigoteKeysPressed   = Sets.empty
-        , monigotePosition      = (0, 0)
-        , monigoteVelocity      = (0, 0)
-        , monigoteWindowSize    = (800, 600)
-        , monigoteInAir         = False
-        , monigoteHeight        = 12
-        , monigoteWidth         = 2
-        , monigoteAnimationWalk = 0
+        { 
+          monigoteKeysPressed   = Sets.empty,
+          monigotePosition      = (0, 0),
+          monigoteVelocity      = (0, 0),
+          monigoteWindowSize    = (800, 600),
+          monigoteInAir         = False,
+          monigoteHeight        = 12,
+          monigoteWidth         = 2,
+          monigoteAnimationWalk = 0,
+          monigoteOrientation = RightFacing
         }
     ventana     = InWindow "Juego del monigote" (windowSize estadoInicial) (100, 100)
     floorHeight = meter2Pixel 2
 
     dibuja :: MonigoteGameState -> Picture
     dibuja estado =
-      Pictures [monigote, suelo, textoInformativo, textoPos, textoVel, textIsInAir, monigotePosPoint]
+      Pictures [monigote, suelo, textoInformativo, textoPos, textoVel, textIsInAir, textAnimation]
       where
         (windowWidth, windowHeight) =
           let (w, h) = monigoteWindowSize estado
@@ -136,16 +142,18 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
             Scale 0.25 0.25 $
               Text $ "IsInAir: " ++ show (monigoteInAir estado)
 
+        textAnimation =
+          Translate leftMarginX (windowHeight / 2 - 210) $
+            Scale 0.25 0.25 $
+              Text $ "Animation: " ++ show (monigoteAnimationWalk estado)
+
         suelo =
           Translate 0 (floorHeight / 2 - windowHeight / 2) $
             rectangleSolid windowWidth floorHeight
 
         monigote = drawMonigote estado
 
-        monigotePosPoint =
-          let (x, y) = monigotePosition estado
-          in Translate (meter2Pixel x) (meter2Pixel y) $
-              ThickCircle 5 5
+        -- monigotePosPoint = Translate (meter2Pixel x) (meter2Pixel y) $ ThickCircle 5 5 where (x, y) = monigotePosition estado
 
         -- === DIBUJO DEL MONIGOTE (cabeza + tronco + brazos + piernas) ===
         -- Origen en los "pies": (x,y) en metros es la base del personaje.
@@ -153,7 +161,7 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
         drawMonigote st =
           Translate px py $
             Scale facing 1 $
-              Pictures [legs, torso, arms, headPic]
+              Pictures [backArm, backLeg, torso, frontArm, frontLeg, headPic] -- Se dibuja de izquierda a de derecha. Cuidado con las extremidades.
           where
             (x, y)  = monigotePosition st
             (vx, _) = monigoteVelocity st
@@ -175,23 +183,23 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
             shoulderY = hipY + torsoH  -- hombros sobre la cadera
 
             -- Orientación: 1 → derecha; -1 → izquierda (según velocidad X)
-            facing = if vx < -0.1 then (-1) else 1
+            facing = if monigoteOrientation st == LeftFacing then (-1) else 1
 
             -- Balanceo (en grados): solo en suelo y si hay velocidad
             speedMag  = abs vx
             swingBase = if monigoteInAir st then 0 else 18
-            swing     = swingBase * sin (monigoteAnimationWalk st * (3 + min 2 (realToFrac speedMag)))
+            swing     = swingBase * sin (monigoteAnimationWalk st)
 
             -- Cabeza con ojos
             headPic =
-              Translate 0 (shoulderY + headR + 2) $
+              Translate 0 (shoulderY + headR) $
                 let eyeR       = headR * 0.10
-                    eyeOffsetX = headR * 0.45
+                    eyeOffsetX = headR * 0.35
                     eyeOffsetY = headR * 0.15
                 in Pictures
-                    [ Color (makeColorI 230 200 170 255) $ circleSolid headR
-                    , Translate (-eyeOffsetX) eyeOffsetY $ Color black $ circleSolid eyeR
-                    , Translate (  eyeOffsetX) eyeOffsetY $ Color black $ circleSolid eyeR
+                    [ 
+                      Color (makeColorI 230 200 170 255) $ circleSolid headR,
+                      Translate ( eyeOffsetX) eyeOffsetY $ Color black $ circleSolid eyeR
                     ]
 
             -- Tronco (rectángulo)
@@ -204,27 +212,28 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
             leg theta =
               Translate 0 hipY $
                 Rotate theta $
-                  Color (makeColorI 40 40 40 255) $
+                  Color (makeColorI 40 40 255 255) $
                     Translate 0 (-limbL / 2) $
                       rectangleSolid limbW limbL
-
-            legs = Pictures [ leg swing, leg (-swing) ]
+            frontLeg = leg swing
+            backLeg = leg (-swing)
 
             -- Brazos: anclados en hombros, rotan en contrafase
             arm theta =
               Translate 0 shoulderY $
                 Rotate theta $
-                  Color (makeColorI 70 70 70 255) $
+                  Color (makeColorI 255 70 70 255) $
                     Translate 0 (-limbL / 2) $
                       rectangleSolid limbW limbL
-
-            arms = Pictures [ arm (-swing), arm swing ]
+            frontArm = arm (-swing)
+            backArm = arm swing
 
     actualiza :: Float -> MonigoteGameState -> MonigoteGameState
     actualiza deltaTime currentState =
       applyPhisics $
         foldr
-          (\(condition, effect) gameState ->
+          (
+            \(condition, effect) gameState ->
             if condition gameState then effect gameState else gameState
           )
           currentState
@@ -232,22 +241,23 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
       where
         -- deltaTime es el tiempo transcurrido (segundos) desde el último frame.
         conditions =
-          [ ( \state -> isKeyPressed state (Char 'a') || isKeyPressed state (SpecialKey KeyLeft)
-            , goLeft
-            )
-          , ( \state -> isKeyPressed state (Char 'd') || isKeyPressed state (SpecialKey KeyRight)
-            , goRight
-            )
-          , ( \state -> isKeyPressed state (Char 'w') || isKeyPressed state (SpecialKey KeyUp)
-            , jump
-            )
+          [ ( \state -> isKeyPressed state (Char 'a') || isKeyPressed state (SpecialKey KeyLeft),
+            goLeft),
+            ( \state -> isKeyPressed state (Char 'd') || isKeyPressed state (SpecialKey KeyRight),
+            goRight),
+            ( \state -> isKeyPressed state (Char 'w') || isKeyPressed state (SpecialKey KeyUp),
+            jump)
           ]
 
         jump :: MonigoteGameState -> MonigoteGameState
         jump state =
           if monigoteInAir state
             then state
-            else state { monigoteVelocity = (0, 10), monigoteInAir = True }
+            else state { 
+                monigoteVelocity = (vx, 10),
+                monigoteInAir = True 
+              }
+                where (vx, _) = monigoteVelocity state
 
         goRight :: MonigoteGameState -> MonigoteGameState
         goRight state = state { monigoteVelocity = (10, vy) }
@@ -260,22 +270,24 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
         applyPhisics :: MonigoteGameState -> MonigoteGameState
         applyPhisics state =
           state
-            { monigotePosition      = (newX, newY)
-            , monigoteInAir         = newY /= floorY
-            , monigoteVelocity      = (newVX, newVY)
-            , monigoteAnimationWalk = newAnimationWalk
+            { 
+              monigotePosition      = (newX, newY),
+              monigoteInAir         = newY /= floorY,
+              monigoteVelocity      = (newVX, newVY),
+              monigoteAnimationWalk = newAnimationWalk,
+              monigoteOrientation = newOrientation
             }
           where
             (oldX, oldY)   = monigotePosition state
             (oldVX, oldVY) = monigoteVelocity state
 
-            (windowWidthM, windowHeightM) =
-              let (w, h) = monigoteWindowSize state
-              in ((pixel2Meter . fromIntegral) w, (pixel2Meter . fromIntegral) h)
+            (windowWidthM, windowHeightM) = ((pixel2Meter . fromIntegral) w, (pixel2Meter . fromIntegral) h)
+              where (w, h) = monigoteWindowSize state
 
             floorY = (pixel2Meter floorHeight) - windowHeightM / 2
 
-            newX = clampRange (oldX + oldVX * deltaTime) (-windowWidthM / 2, windowWidthM / 2)
+            newX = clampRange (oldX + oldVX * deltaTime) (-windowWidthM / 2 + marging, windowWidthM / 2 - marging)
+              where marging = 2 -- m
             newY = clampRange (oldY + oldVY * deltaTime) (floorY, windowHeightM / 2)
 
             newVY =
@@ -289,13 +301,43 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
                 then 0
                 else candidateNewVX
 
+            oldOrientation = monigoteOrientation state
+            newOrientation
+              | oldOrientation == LeftFacing && newVX > 0 = RightFacing
+              | oldOrientation == RightFacing && newVX < 0 = LeftFacing
+              | otherwise = oldOrientation
             -- Avance de fase de caminata
             moving            = abs newVX > 0.3
-            freq              = 3 + min 2 (abs newVX)
+            freq              = 1 + (abs newVX) / 1.5
             newAnimationWalk =
               if not (monigoteInAir state) && moving
-                then monigoteAnimationWalk state + deltaTime * realToFrac freq
-                else monigoteAnimationWalk state
+                then modF (2*pi) $ monigoteAnimationWalk state + deltaTime * realToFrac freq
+                else
+                  if monigoteAnimationWalk state > 1.5*pi -- Entre pi y 2 pi. Hay que acercarlo a 2 pi
+                    then roundP $ monigoteAnimationWalk state * 2 ** deltaTime
+                    else 
+                      if monigoteAnimationWalk state > pi -- Entre pi y 2 pi. Hay que acercarlo a pi
+                        then roundP $ monigoteAnimationWalk state * 0.5 ** deltaTime 
+                        else
+                          if monigoteAnimationWalk state > pi/2 -- Entre 0 y pi. Hay que acercalo a pi.
+                            then roundP $ monigoteAnimationWalk state * 2 ** deltaTime
+                            -- Hay que acercarlo a 0
+                            else roundP $ monigoteAnimationWalk state * 0.1 ** deltaTime
+            -- Si x es cercano a 0, pi o 2pi, devuelve 0 (estado nulo de animación).
+            roundP x
+              | x > 2*pi - err = 0
+              | pi - err < x && x < pi + err = 0
+              | x < err = 0
+              | otherwise = x
+                where err = pi/16
+
+            -- "mod" para Float
+            modF :: Float -> Float -> Float
+            modF m x
+              | result < 0 = result + m
+              | otherwise  = result
+                where
+                  result = x - (m * (fromIntegral (floor (x / m)) :: Float))
 
             clampRange :: Scalar -> Scalar2D -> Scalar
             clampRange value (minV, maxV)
