@@ -45,7 +45,7 @@ obtenVPerp :: [Point] -> [Vector]
 obtenVPerp ps = [perp (sub p2 p1) | (p1, p2) <- zip ps (tail ps ++ [head ps])]
 
 -- Comprueba si dos rangos intersecan. Hacer any sobre todos ellos para ver si hay huecos.
-hayInterseccion :: (Double, Double) -> (Double, Double) -> Bool
+hayInterseccion :: Scalar2D -> Scalar2D -> Bool
 hayInterseccion (amin, amax) (bmin, bmax) = not (amax < bmin || bmax < amin)
 
 -- Consigue el rango proyectado por un polígono sobre un vector
