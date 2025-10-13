@@ -58,18 +58,22 @@ rangoProyectado p v = (minimum proyecciones, maximum proyecciones)
 -- Detección de colisiones Proyectil–Robot:
 -- Devuelve una lista de tuplas (Projectile, Robot) que colisionan.
 detectRobotProjectileCollisions :: [Projectile] -> [Robot] -> [RobotProjectileCollisionEvent]
-detectRobotProjectileCollisions ps rs =
-  [ (p, r)
-  | p <- ps
-  , r <- rs
-  , checkCollision (projectileVertices p) (robotVertices r)
-  ]
+detectRobotProjectileCollisions ps rs = catMaybes $ colisionRP <$> ps <*> rs
+  where colisionRP p r = if checkCollision (vertices p) (vertices r)
+                        then Just (p, r)
+                        else Nothing
+-- detectRobotProjectileCollisions ps rs =
+--   [ (p, r)
+--   | p <- ps
+--   , r <- rs
+--   , checkCollision (projectileVertices p) (robotVertices r)
+--   ]
 
 -- Detección de colisiones Robot–Robot:
 -- Empareja robots una sola vez (i < j) y devuelve las tuplas (Robot, Robot) que colisionan.
 detectRobotRobotCollisions :: [Robot] -> [RobotRobotCollisionEvent]
 detectRobotRobotCollisions []     = []
-detectRobotRobotCollisions rs = catMaybes (colisionRobot <$> rs <*> rs)
+detectRobotRobotCollisions rs = catMaybes $ colisionRobot <$> rs <*> rs
   where colisionRobot ra rb = if ra /= rb && checkCollision (vertices ra) (vertices rb)
                               then Just (ra,rb)
                               else Nothing
