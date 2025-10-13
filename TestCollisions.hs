@@ -5,13 +5,13 @@ module Main where
 
 import qualified Data.Map as Map
 
-import Geometry (Point, translateVertices, rotateVertices)
+import Geometry (Scalar, Point, translateVertices, rotateVertices)
 import Entities (Projectile(..), GameEntity(..))
 import Robot (Robot(..), Turret(..))
 import Collisions (checkCollision, detectRobotProjectileCollisions, detectRobotRobotCollisions)
 
 -- Construye un rectángulo axis-aligned de 2x2 centrado en (cx, cy)
-rect2x2 :: (Double, Double) -> [Point]
+rect2x2 :: (Scalar, Scalar) -> [Point]
 rect2x2 (cx, cy) =
   [ (cx - 1, cy - 1)
   , (cx + 1, cy - 1)
@@ -19,7 +19,7 @@ rect2x2 (cx, cy) =
   , (cx - 1, cy + 1)
   ]
 
-mkRobot :: (Double, Double) -> Robot
+mkRobot :: (Scalar, Scalar) -> Robot
 mkRobot (x, y) = Rob
   { robotPosition   = (x, y)
   , robotVelocity   = (0, 0)
@@ -32,7 +32,7 @@ mkRobot (x, y) = Rob
   , robotMemory     = Map.empty
   }
 
-mkProjectile :: (Double, Double) -> Projectile
+mkProjectile :: (Scalar, Scalar) -> Projectile
 mkProjectile (x, y) = Proj
   { projectilePosition    = (x, y)
   , projectileVelocity    = (0, 0)
