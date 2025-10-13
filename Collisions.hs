@@ -73,15 +73,17 @@ detectRobotProjectileCollisions ps rs = catMaybes $ colisionRP <$> ps <*> rs
 -- Empareja robots una sola vez (i < j) y devuelve las tuplas (Robot, Robot) que colisionan.
 detectRobotRobotCollisions :: [Robot] -> [RobotRobotCollisionEvent]
 detectRobotRobotCollisions []     = []
-detectRobotRobotCollisions rs = catMaybes $ colisionRobot <$> rs <*> rs
-  where colisionRobot ra rb = if ra /= rb && checkCollision (vertices ra) (vertices rb)
-                              then Just (ra,rb)
-                              else Nothing
--- detectRobotRobotCollisions (r:rs) =
---   colisionesConR r rs ++ detectRobotRobotCollisions rs
---   where
---     -- Compara el robot r con cada robot del resto de la lista
---     colisionesConR :: Robot -> [Robot] -> [RobotRobotCollisionEvent]
+detectRobotRobotCollisions (r:rs) =
+  colisionesConR r rs ++ detectRobotRobotCollisions rs
+  where
+    -- Compara el robot r con cada robot del resto de la lista
+    colisionesConR :: Robot -> [Robot] -> [RobotRobotCollisionEvent]
+    colisionesConR a = mapMaybe (colisionRobot a)
+
+    colisionRobot :: Robot -> Robot -> Maybe (Robot, Robot)
+    colisionRobot ra rb = if ra /= rb && checkCollision (vertices ra) (vertices rb)
+                          then Just (ra,rb)
+                          else Nothing
 --     colisionesConR _ [] = []
 --     colisionesConR a (b:bs)
 --       | checkCollision (robotVertices a) (robotVertices b) = (a, b) : colisionesConR a bs
