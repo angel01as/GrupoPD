@@ -81,7 +81,7 @@ detectRobotRobotCollisions (r:rs) =
     colisionesConR a = mapMaybe (colisionRobot a)
 
     colisionRobot :: Robot -> Robot -> Maybe (Robot, Robot)
-    colisionRobot ra rb = if ra /= rb && checkCollision (vertices ra) (vertices rb)
+    colisionRobot ra rb = if checkCollision (vertices ra) (vertices rb)
                           then Just (ra,rb)
                           else Nothing
 --     colisionesConR _ [] = []
