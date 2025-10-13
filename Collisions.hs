@@ -13,8 +13,9 @@ import Geometry
   (Scalar2D, Point, Vector
   , dot, sub, perp )
 
-import Entities (Projectile(..))
+import Entities (Projectile(..), GameEntity (vertices))
 import Robot (Robot(..))
+import Data.Maybe
 
 -- Eventos de colisión con type
 type RobotProjectileCollisionEvent = (Projectile, Robot)
@@ -68,15 +69,19 @@ detectRobotProjectileCollisions ps rs =
 -- Empareja robots una sola vez (i < j) y devuelve las tuplas (Robot, Robot) que colisionan.
 detectRobotRobotCollisions :: [Robot] -> [RobotRobotCollisionEvent]
 detectRobotRobotCollisions []     = []
-detectRobotRobotCollisions (r:rs) =
-  colisionesConR r rs ++ detectRobotRobotCollisions rs
-  where
-    -- Compara el robot r con cada robot del resto de la lista
-    colisionesConR :: Robot -> [Robot] -> [RobotRobotCollisionEvent]
-    colisionesConR _ [] = []
-    colisionesConR a (b:bs)
-      | checkCollision (robotVertices a) (robotVertices b) = (a, b) : colisionesConR a bs
-      | otherwise                                          = colisionesConR a bs
+detectRobotRobotCollisions rs = catMaybes (colisionRobot <$> rs <*> rs)
+  where colisionRobot ra rb = if ra /= rb && checkCollision (vertices ra) (vertices rb)
+                              then Just (ra,rb)
+                              else Nothing
+-- detectRobotRobotCollisions (r:rs) =
+--   colisionesConR r rs ++ detectRobotRobotCollisions rs
+--   where
+--     -- Compara el robot r con cada robot del resto de la lista
+--     colisionesConR :: Robot -> [Robot] -> [RobotRobotCollisionEvent]
+--     colisionesConR _ [] = []
+--     colisionesConR a (b:bs)
+--       | checkCollision (robotVertices a) (robotVertices b) = (a, b) : colisionesConR a bs
+--       | otherwise                                          = colisionesConR a bs
 
 -- checkCollisions: Función principal que coordina todas las comprobaciones de colisión.
 checkCollisions :: [Robot] -> [Projectile] -> ([RobotProjectileCollisionEvent], [RobotRobotCollisionEvent])
