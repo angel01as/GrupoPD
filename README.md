@@ -21,6 +21,7 @@
 - ✅ **Daño por área**: Sistema de daño basado en distancia
 - ✅ **Efectos temporales**: Fase de daño (30%) y fase de humo (70%)
 - ✅ **Funciones**: `createExplosion`, `updateExplosion`, `isExplosionActive`, `isExplosionDamaging`
+- ✅ **GameEntity**: Implementación completa de la interfaz GameEntity
 
 #### **4. AI.hs - Ejecución Mejorada**
 - ✅ **Ejecución con tiempo**: Considera `deltaTime` entre frames
@@ -29,48 +30,14 @@
 - ✅ **executeAICommands**: Ejecuta comandos considerando el tiempo
 - ✅ **getBehaviorByName**: Sistema de comportamientos por nombre para evitar dependencias circulares
 
-### **Funcionalidades Principales Implementadas:**
-
-#### **✅ Punto de Entrada del Programa (Main.hs)**
-- Inicialización de robots con diferentes comportamientos
-- Configuración del estado inicial del juego
-- Lanzamiento del torneo
-
-#### **✅ Lógica del Torneo (Bucle Principal)**
-1. **Actualización de AI**: Cada robot ejecuta su comportamiento
-2. **Ejecución de comandos**: Procesamiento con tiempo entre frames
-3. **Detección de colisiones**: Sistema completo robot-robot y proyectil-robot
-4. **Renderizado**: Visualización del estado en tiempo real
-
-#### **✅ Lógica de Renderizado**
-- **Robots**: Posición, orientación, velocidad, barra de salud
-- **Proyectiles**: Posición, velocidad, daño
-- **Explosiones**: Radio, progreso temporal, estado
-- **Barras de salud**: Representación visual con porcentajes
-
-## **Cómo Ejecutar el Juego**
-
-### **Método 1: Compilación Manual**
-```bash
-ghc -package containers Main.hs -o HAUS5.exe
-.\HAUS5.exe
-```
-
-### **Método 2: Script de Compilación (Windows)**
-```bash
-compile.bat
-```
-
 ## **Estructura del Proyecto**
 
 ```
-├── Main.hs              # Punto de entrada y bucle principal
 ├── AI.hs                # Sistema de comportamientos AI y DSL
 ├── Robot.hs             # Definición de robots y torretas
 ├── Entities.hs          # Proyectiles, explosiones y entidades del juego
 ├── Geometry.hs          # Funciones geométricas y matemáticas
 ├── Collisions.hs        # Sistema de detección de colisiones
-├── compile.bat          # Script de compilación para Windows
 └── README.md            # Este archivo
 ```
 
@@ -100,21 +67,37 @@ compile.bat
 
 ## **Objetivos Cumplidos**
 
-✅ **Punto de entrada principal** - Implementado en `Main.hs`  
-✅ **Bucle principal del juego** - Sistema completo de actualización  
-✅ **Lógica de renderizado** - Visualización detallada de todos los objetos  
-✅ **Sistema de colisiones** - Detección y procesamiento de colisiones  
-✅ **Comportamientos AI** - Sistema extensible de comportamientos  
-✅ **Sistema de explosiones** - Efectos visuales y de daño  
-✅ **Sistema de torretas** - Cooldown, daño y alcance  
+✅ **robotBehavior** - Implementado con capa extra de nombres  
+✅ **robotMaxEnergy** - Añadido al tipo Robot  
+✅ **Torreta completa** - Cooldown, daño, alcance implementados  
+✅ **Sistema de explosiones** - Radio dinámico, daño temporal, efecto humo  
+✅ **Capa extra** - Sistema de nombres para evitar dependencias circulares  
 ✅ **Ejecución con tiempo** - Consideración de deltaTime entre frames  
-✅ **Capa extra entre BotBehavior y BotCommand** - Sistema de nombres para evitar dependencias circulares  
+✅ **AIExecutionResult** - Resultado estructurado de ejecución AI  
+
+## **Cómo Usar los Módulos**
+
+### **Cargar en GHCi (Recomendado)**
+```bash
+ghci -package containers
+:load AI.hs
+:load Robot.hs
+:load Entities.hs
+```
+
+### **Compilar los Módulos**
+```bash
+ghc -package containers -c AI.hs
+ghc -package containers -c Robot.hs
+ghc -package containers -c Entities.hs
+```
 
 ## **Notas Técnicas**
 
 - **Dependencias circulares resueltas**: Se usa un sistema de nombres de comportamientos en lugar de referencias directas
-- **Compilación exitosa**: El proyecto compila sin errores con GHC 8.6.5
+- **Compilación exitosa**: Los módulos compilan sin errores con GHC 8.6.5
 - **Sistema extensible**: Fácil añadir nuevos comportamientos y comandos
 - **Manejo de tiempo**: Consideración precisa del tiempo entre frames
+- **GameEntity**: Las explosiones implementan correctamente la interfaz GameEntity
 
-El proyecto está **completamente funcional** y listo para crear nuevos bots con diferentes estrategias.
+Los módulos están **completamente funcionales** y listos para ser integrados en un sistema de juego más amplio.
