@@ -9,7 +9,12 @@ module Robot (
   detectedAgent,
   isRobotAlive,
   countActiveRobots,
-  updateRobotVelocity
+  updateRobotVelocity,
+  canShoot,
+  updateTurretCooldown,
+  shootProjectile,
+  afterShooting,
+  createBasicRobot
 ) where
 
 import Entities
@@ -22,11 +27,15 @@ data Robot = Rob
     robotVelocity   :: Velocity,
     robotSize  :: Size,
     robotVertices :: [Point],
-    robotEnergy     :: Scalar, 
+    robotEnergy     :: Scalar,
+    robotMaxEnergy  :: Scalar, 
     robotRadarRange :: Scalar, 
     robotOrientation :: Angle, 
     robotTurret     :: Turret,
-    robotMemory :: Map.Map String MemoryValue
+    robotMemory :: Map.Map String MemoryValue,
+    robotBehavior :: String, -- Nombre del comportamiento, no la función
+    robotLastUpdateTime :: Scalar,
+    robotCurrentInstruction :: Maybe String -- Nombre de la instrucción actual
   } deriving (Show, Eq)
 
 instance GameEntity Robot where
@@ -43,7 +52,11 @@ instance GameEntity Robot where
 
 data Turret = Turr
   {
-    turretOrientation :: Angle
+    turretOrientation :: Angle,
+    turretCooldown :: Scalar,
+    turretMaxCooldown :: Scalar,
+    turretDamage :: Scalar,
+    turretRange :: Scalar
   } deriving(Show , Eq)
 
 -- MovementAction es un Enum
@@ -88,3 +101,62 @@ updateRobotVelocity r (Rotate angleDif) = setVelocity rotatedRobot reducedVeloci
     reducedVelocity = prodByScalar (1 - angleDif/(2*pi)) (velocity r)
 updateRobotVelocity r (MoveForward speed) = setVelocity r (add2D (velocity r) (prodByScalar speed (angleFactor (orientation r))))
 updateRobotVelocity r (MoveBackward speed) = setVelocity r (subVec (velocity r) (prodByScalar speed (angleFactor (orientation r))))
+
+-- ============================================================================
+-- FUNCIONES PARA MANEJAR LA TORRETA
+-- ============================================================================
+
+-- Verifica si el robot puede disparar (cooldown terminado)
+canShoot :: Robot -> Bool
+canShoot r = turretCooldown (robotTurret r) <= 0
+
+-- Actualiza el cooldown de la torreta
+updateTurretCooldown :: Robot -> Scalar -> Robot
+updateTurretCooldown r deltaTime = r { robotTurret = turret { turretCooldown = max 0 (turretCooldown turret - deltaTime) } }
+  where turret = robotTurret r
+
+-- Crea un proyectil si el robot puede disparar
+shootProjectile :: Robot -> Maybe Projectile
+shootProjectile r 
+  | canShoot r = Just $ Proj
+    { projectilePosition = robotPosition r
+    , projectileVelocity = prodByScalar 100 (angleFactor (turretOrientation (robotTurret r)))
+    , projectileVertices = [(0,0), (2,0), (2,2), (0,2)]
+    , projectileSize = (2, 2)
+    , projectileOrientation = turretOrientation (robotTurret r)
+    , projectileDamage = turretDamage (robotTurret r)
+    }
+  | otherwise = Nothing
+
+-- Actualiza el robot después de disparar (reinicia cooldown)
+afterShooting :: Robot -> Robot
+afterShooting r = r { robotTurret = turret { turretCooldown = turretMaxCooldown turret } }
+  where turret = robotTurret r
+
+-- ============================================================================
+-- FUNCIÓN PARA CREAR ROBOTS BÁSICOS
+-- ============================================================================
+
+-- Crea un robot básico con comportamiento AI
+createBasicRobot :: Position -> String -> Robot
+createBasicRobot pos behaviorName = Rob
+  { robotPosition = pos
+  , robotVelocity = (0, 0)
+  , robotSize = (20, 20)
+  , robotVertices = [(-10, -10), (10, -10), (10, 10), (-10, 10)]
+  , robotEnergy = 100
+  , robotMaxEnergy = 100
+  , robotRadarRange = 50
+  , robotOrientation = 0
+  , robotTurret = Turr
+    { turretOrientation = 0
+    , turretCooldown = 0
+    , turretMaxCooldown = 1.0
+    , turretDamage = 25
+    , turretRange = 100
+    }
+  , robotMemory = Map.empty
+  , robotBehavior = behaviorName
+  , robotLastUpdateTime = 0
+  , robotCurrentInstruction = Nothing
+  }

@@ -7,18 +7,21 @@ module AI (
   BotCommand(..),
   BotInstruction(..),
   GameState(..),
+  AIExecutionResult(..),
   -- Funciones del DSL
   move, moveBackward, rotate, multiplyVelocity, shoot, wait, ifThen, ifThenElse, sequence,
   -- Condiciones
   hasTarget, isLowEnergy, isUnderAttack, distanceTo, angleTo,
   -- Decisor de comportamientos
   decideBotBehavior,
+  -- Ejecutor de comandos
+  executeAICommands, updateRobotAI,
   -- Comportamientos de ejemplo
   aggressiveBot, defensiveBot, exampleBot
 ) where
 
-import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent)
-import Entities (Projectile(..), GameEntity(..))
+import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, canShoot, shootProjectile, afterShooting, updateTurretCooldown)
+import Entities (Projectile(..), GameEntity(..), Explosion(..), createExplosion)
 import Geometry (Position, Angle, Scalar, distanceBetween, angleToTarget)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
@@ -256,3 +259,61 @@ defensiveBot gs robot =
 -- Bot de ejemplo simple
 exampleBot :: BotBehavior
 exampleBot = aggressiveBot
+
+-- ============================================================================
+-- EJECUTOR DE COMANDOS AI
+-- ============================================================================
+
+-- Resultado de ejecutar comandos AI
+data AIExecutionResult = AIExecutionResult
+  { updatedRobot :: Robot
+  , newProjectiles :: [Projectile]
+  , newExplosions :: [Explosion]
+  } deriving (Show, Eq)
+
+-- Ejecuta una lista de comandos AI sobre un robot
+executeAICommands :: [BotCommand] -> Robot -> Scalar -> AIExecutionResult
+executeAICommands commands robot deltaTime = 
+  let (updatedRobot', newProjectiles, newExplosions) = 
+        foldl executeCommand (robot, [], []) commands
+  in AIExecutionResult updatedRobot' newProjectiles newExplosions
+
+-- Ejecuta un comando individual
+executeCommand :: (Robot, [Projectile], [Explosion]) -> BotCommand -> (Robot, [Projectile], [Explosion])
+executeCommand (robot, projectiles, explosions) (MovementCommand action) = 
+  (updateRobotVelocity robot action, projectiles, explosions)
+executeCommand (robot, projectiles, explosions) ShootCommand = 
+  case shootProjectile robot of
+    Just projectile -> (afterShooting robot, projectile : projectiles, explosions)
+    Nothing -> (robot, projectiles, explosions)
+executeCommand (robot, projectiles, explosions) (WaitCommand time) = 
+  (robot, projectiles, explosions) -- El wait se maneja a nivel de instrucción
+executeCommand (robot, projectiles, explosions) (SetMemoryCommand key value) = 
+  (robot { robotMemory = Map.insert key value (robotMemory robot) }, projectiles, explosions)
+executeCommand (robot, projectiles, explosions) (ClearMemoryCommand key) = 
+  (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
+
+-- Actualiza un robot con su comportamiento AI
+updateRobotAI :: Robot -> GameState -> Scalar -> AIExecutionResult
+updateRobotAI robot gs deltaTime = 
+  let -- Actualizar cooldown de la torreta
+      robotWithUpdatedCooldown = updateTurretCooldown robot deltaTime
+      
+      -- Obtener comportamiento por nombre
+      behavior = getBehaviorByName (robotBehavior robot)
+      
+      -- Decidir comportamiento
+      commands = decideBotBehavior behavior gs robotWithUpdatedCooldown
+      
+      -- Ejecutar comandos
+      result = executeAICommands commands robotWithUpdatedCooldown deltaTime
+      
+      -- Actualizar tiempo de última actualización
+      finalRobot = (updatedRobot result) { robotLastUpdateTime = gameTime gs }
+  in result { updatedRobot = finalRobot }
+
+-- Obtiene un comportamiento por su nombre
+getBehaviorByName :: String -> BotBehavior
+getBehaviorByName "aggressive" = aggressiveBot
+getBehaviorByName "defensive" = defensiveBot
+getBehaviorByName _ = aggressiveBot -- Comportamiento por defecto
