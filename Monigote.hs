@@ -1,72 +1,72 @@
 module Monigote where
 
-import Graphics.Gloss
-import Graphics.Gloss.Interface.Pure.Game
-import qualified Data.Set as Sets hiding (Set (show))
-import Geometry (Size, Position, Velocity, add2D, Scalar, Scalar2D)
+import Graphics.Gloss -- dibuja (Picture, Translate, Rotate, Color, etc
+import Graphics.Gloss.Interface.Pure.Game -- para el juego
+import qualified Data.Set as Sets hiding (Set (show)) -- para el set de teclas presionadas
+import Geometry (Size, Position, Velocity, add2D, Scalar, Scalar2D) -- para el estado del juego
 
 import Data.Maybe (fromMaybe, isNothing)
 
 data MonigoteGameState = MonigoteGameState
   { 
-    monigoteKeysPressed   :: Sets.Set Key,
-    monigotePosition      :: Position,   -- m
-    monigoteVelocity      :: Velocity,   -- m/s
-    monigoteWindowSize    :: (Int, Int),
-    monigoteInAir         :: Bool,
-    monigoteHeight        :: Scalar,     -- m
-    monigoteWidth         :: Scalar,     -- m
+    monigoteKeysPressed   :: Sets.Set Key, -- conjunto de teclas presionadas
+    monigotePosition      :: Position,   -- metros
+    monigoteVelocity      :: Velocity,   -- metros/segundo
+    monigoteWindowSize    :: (Int, Int), -- tamaño de la ventana en píxeles
+    monigoteInAir         :: Bool,      -- True si el monigote está en el aire (no en el suelo)
+    monigoteHeight        :: Scalar,     -- metros
+    monigoteWidth         :: Scalar,     -- metros
     monigoteAnimationWalk :: Float,      -- fase de caminata para animar las piernas
     monigoteOrientation :: Orientation
   }
   deriving (Show, Eq)
 
-data Orientation = LeftFacing | RightFacing deriving (Show, Eq)
+data Orientation = LeftFacing | RightFacing deriving (Show, Eq) --Simple enumerado para la orientación del monigote
 
 -- Show personalizado para Set
-showSet :: (Show a) => Sets.Set a -> String
-showSet s = "{" ++ formatElements (Sets.toList s) ++ "}"
+showSet :: (Show a) => Sets.Set a -> String -- Muestra un Set como una lista entre llaves
+showSet s = "{" ++ formatElements (Sets.toList s) ++ "}" -- Transforma el Set en lista y la formatea
   where
     formatElements []     = ""
     formatElements [x]    = show x
-    formatElements (x:xs) = show x ++ ", " ++ formatElements xs
+    formatElements (x:xs) = show x ++ ", " ++ formatElements xs -- Formatea recursivamente los elementos
 
 -- Abstracciones sobre los estados que se implementan.
-class KeysPressedState a where
+class KeysPressedState a where -- Cualquier tipo a que quiera comportarse como un estado con teclas presionadas debe implementar estas funciones
   keysPressed :: a -> Sets.Set Key
   addKey      :: a -> Key -> a
   deleteKey   :: a -> Key -> a
 
-instance KeysPressedState MonigoteGameState where
-  keysPressed   = monigoteKeysPressed
-  addKey s k    = s { monigoteKeysPressed = Sets.insert k (monigoteKeysPressed s) }
-  deleteKey s k = s { monigoteKeysPressed = Sets.delete k (monigoteKeysPressed s) }
+instance KeysPressedState MonigoteGameState where --Aquí le decimos a Haskell cómo aplicar la clase a nuestro tipo concreto MonigoteGameState
+  keysPressed   = monigoteKeysPressed -- Devuelve el conjunto de teclas presionadas del estado
+  addKey s k    = s { monigoteKeysPressed = Sets.insert k (monigoteKeysPressed s) } -- crea una copia del estado con la tecla k añadida al conjunto
+  deleteKey s k = s { monigoteKeysPressed = Sets.delete k (monigoteKeysPressed s) } -- crea una copia del estado con la tecla k eliminada del conjunto
 
-class WindowSizeState a where
-  windowSize    :: a -> (Int, Int)
-  setWindowSize :: a -> (Int, Int) -> a
+class WindowSizeState a where -- Cualquier tipo a que quiera comportarse como un estado con tamaño de ventana debe implementar estas funciones
+  windowSize    :: a -> (Int, Int) -- Devuelve el tamaño de la ventana (ancho, alto)
+  setWindowSize :: a -> (Int, Int) -> a -- Crea una copia del estado con el nuevo tamaño de ventana
 
-instance WindowSizeState MonigoteGameState where
-  windowSize             = monigoteWindowSize
-  setWindowSize state sz = state { monigoteWindowSize = sz }
+instance WindowSizeState MonigoteGameState where --Aquí le decimos a Haskell cómo aplicar la clase a nuestro tipo concreto MonigoteGameState
+  windowSize             = monigoteWindowSize -- Devuelve el tamaño de la ventana del estado
+  setWindowSize state sz = state { monigoteWindowSize = sz } -- crea una copia del estado con el nuevo tamaño de ventana
 
 -- Controlador de eventos con Maybe
-type MaybeEventHandler a = Event -> a -> Maybe a
+type MaybeEventHandler a = Event -> a -> Maybe a -- Recibe un evento(Tecla , ratón) y un estado a por ejemplo MonigoteGameState y devuelve Maybe a (Nothing si no maneja el evento, Just nuevoEstado si lo maneja)
 
-handleEvents :: [MaybeEventHandler gameState] -> Event -> gameState -> gameState
-handleEvents handlers event gs = fromMaybe gs result
+handleEvents :: [MaybeEventHandler gameState] -> Event -> gameState -> gameState -- Recibe una lista de manejadores de eventos, un evento y un estado, y devuelve el nuevo estado
+handleEvents handlers event gs = fromMaybe gs result -- Si result es Nothing devuelve el estado original gs, si es Just nuevoEstado devuelve nuevoEstado
   where
-    validHandlings = [ hd event gs | hd <- handlers, not (isNothing (hd event gs)) ]
+    validHandlings = [ hd event gs | hd <- handlers, not (isNothing (hd event gs)) ] -- Aplica cada manejador de eventos al evento y al estado, y filtra los que no devuelven Nothing
     result         = if null validHandlings then Nothing else head validHandlings
 
-tryHandleKeys :: (KeysPressedState kps) => Event -> kps -> Maybe kps
-tryHandleKeys event state =
+tryHandleKeys :: (KeysPressedState kps) => Event -> kps -> Maybe kps -- Manejador de eventos para teclas
+tryHandleKeys event state = -- Si el evento es una tecla presionada o liberada, actualiza el estado
   case event of
-    EventKey k Down _ _ -> Just $ addKey state k
+    EventKey k Down _ _ -> Just $ addKey state k -- Si la tecla se presiona, la añade al conjunto
     EventKey k Up   _ _ -> Just $ deleteKey state k
     _                   -> Nothing
 
-tryHandleResizing :: (WindowSizeState wss) => Event -> wss -> Maybe wss
+tryHandleResizing :: (WindowSizeState wss) => Event -> wss -> Maybe wss -- Manejador de eventos para redimensionar ventana
 tryHandleResizing event state =
   case event of
     EventResize size -> Just $ setWindowSize state size
@@ -103,12 +103,12 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
           monigoteVelocity      = (0, 0),
           monigoteWindowSize    = (800, 600),
           monigoteInAir         = False,
-          monigoteHeight        = 12,
+          monigoteHeight        = 8,
           monigoteWidth         = 2,
           monigoteAnimationWalk = 0,
           monigoteOrientation = RightFacing
         }
-    ventana     = InWindow "Juego del monigote" (windowSize estadoInicial) (100, 100)
+    ventana     = InWindow "Juego del monigote " (windowSize estadoInicial) (100, 100)
     floorHeight = meter2Pixel 2
 
     dibuja :: MonigoteGameState -> Picture
@@ -159,8 +159,8 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
         -- Origen en los "pies": (x,y) en metros es la base del personaje.
         drawMonigote :: MonigoteGameState -> Picture
         drawMonigote st =
-          Translate px py $
-            Scale facing 1 $
+          Translate px py $ -- Mueve a la posición (px, py) en píxeles
+            Scale facing 1 $ -- Refleja en X si mira a la izquierda
               Pictures [backArm, backLeg, torso, frontArm, frontLeg, headPic] -- Se dibuja de izquierda a de derecha. Cuidado con las extremidades.
           where
             (x, y)  = monigotePosition st
@@ -186,8 +186,8 @@ monigoteGame = play ventana white fps estadoInicial dibuja (handleEvents [tryHan
             facing = if monigoteOrientation st == LeftFacing then (-1) else 1
 
             -- Balanceo (en grados): solo en suelo y si hay velocidad
-            speedMag  = abs vx
-            swingBase = if monigoteInAir st then 0 else 18
+            speedMag  = abs vx -- magnitud de la velocidad horizontal
+            swingBase = if monigoteInAir st then 0 else 18 -- grados
             swing     = swingBase * sin (monigoteAnimationWalk st)
 
             -- Cabeza con ojos
