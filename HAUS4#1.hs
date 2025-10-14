@@ -11,16 +11,16 @@ import Graphics.Gloss.Interface.Pure.Game
 
 -- ====== Modelo ======
 data Modo
-  = DemoDisplay
-  | DemoAnimate
-  | DemoPlay
+  = DemoDisplay -- Dibujo fijo + transformaciones
+  | DemoAnimate -- Animación básica (depende del tiempo)
+  | DemoPlay    -- Interacción con teclado (mover un cuadrado)
   deriving (Eq, Show)
 
 data Mundo = Mundo
   { modo     :: Modo
   , tiempo   :: Float      -- para la demo de animación
   , posX     :: Float      -- para la demo de interacción (mover en X)
-  , velX     :: Float
+  , velX     :: Float -- velocidad en X (para la demo de interacción)
   , mouseXY  :: (Float,Float) -- para mostrar una mira con el ratón (eventos de ratón)
   } deriving Show
 

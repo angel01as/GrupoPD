@@ -2,7 +2,7 @@
 
 module AI (
   -- Tipos del DSL
-  BotBehavior,
+  BotBehavior, 
   BotCondition(..),
   BotCommand(..),
   BotInstruction(..),
@@ -66,7 +66,8 @@ data BotInstruction
   deriving (Show, Eq)
 
 -- Comportamiento del bot que recibe estado del juego y devuelve instrucciones
-type BotBehavior = GameState -> Robot -> BotInstruction
+type BotBehavior = GameState -> Robot -> BotInstruction -- El tipo de dato lo usamos para identificar el tipo de comportamiento del bot.
+-- Behavior es una función que recibe el estado del juego y el robot y devuelve una instrucción.
 
 -- ============================================================================
 -- FUNCIONES DEL DSL
@@ -126,7 +127,7 @@ distanceTo = DistanceToTarget
 angleTo :: Angle -> BotCondition
 angleTo = AngleToTarget
 
-memoryEquals :: String -> MemoryValue -> BotCondition
+memoryEquals :: String -> MemoryValue -> BotCondition -- ¿Tengo guardado en memoria un valor específico?
 memoryEquals = MemoryEquals
 
 -- ============================================================================
@@ -141,7 +142,8 @@ evalCondition HasTarget gs robot =
   any (\r -> r /= robot && detectedAgent robot r) (gameRobots gs)
 
 -- CONDICIÓN: ¿La energía del robot está por debajo del umbral?
-evalCondition (IsLowEnergy threshold) _ robot = robotEnergy robot < threshold
+evalCondition (IsLowEnergy threshold) _ robot = 
+  robotEnergy robot < threshold -- True si la energía del robot es menor al umbral.
 
 -- CONDICIÓN: ¿Está el robot siendo atacado?
 evalCondition IsUnderAttack gs robot = 
@@ -160,8 +162,8 @@ evalCondition (AngleToTarget maxAngle) gs robot =
     Just enemy -> abs (angleToTarget (position robot) (position enemy) - orientation robot) < maxAngle
 
 -- CONDICIÓN: ¿La memoria del robot contiene un valor específico?
-evalCondition (MemoryEquals key value) _ robot = 
-  case Map.lookup key (robotMemory robot) of
+evalCondition (MemoryEquals key value) _ robot = -- _ es el estado del juego y el robot.
+  case Map.lookup key (robotMemory robot) of -- Lookup es una función que busca un valor en un mapa.
     Nothing -> False
     Just memValue -> value == memValue
 
@@ -188,17 +190,17 @@ findNearestEnemy robot enemies =
 -- Decide qué instrucciones debe ejecutar un bot basado en su comportamiento y el estado del juego
 decideBotBehavior :: BotBehavior -> GameState -> Robot -> [BotCommand]
 decideBotBehavior botBehavior gs robot = 
-  let instruction = botBehavior gs robot
+  let instruction = botBehavior gs robot -- Compor
   in decideInstruction instruction gs robot
 
 -- Decide qué comandos ejecutar basado en una instrucción
 decideInstruction :: BotInstruction -> GameState -> Robot -> [BotCommand]
-decideInstruction (Simple cmd) _ _ = [cmd]
+decideInstruction (Simple cmd) _ _ = [cmd] 
 decideInstruction (Conditional cond thenInstruction elseInstruction) gs robot =
-  if evalCondition cond gs robot
+  if evalCondition cond gs robot -- si se cumple
   then decideInstruction thenInstruction gs robot
   else decideInstruction elseInstruction gs robot
-decideInstruction (Sequence instructions) gs robot = 
+decideInstruction (Sequence instructions) gs robot =  -- Se vuelve a llamar porque es una secuencia de instrucciones.
   concatMap (\instruction -> decideInstruction instruction gs robot) instructions
 
 -- ============================================================================
