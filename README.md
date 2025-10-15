@@ -34,6 +34,8 @@
 
 ```
 ├── AI.hs                # Sistema de comportamientos AI y DSL
+├── Game.hs              # Bucle principal (draw/update) y GameState del juego
+├── Main.hs              # Punto de entrada: crea estado inicial y lanza playGame
 ├── Robot.hs             # Definición de robots y torretas
 ├── Entities.hs          # Proyectiles, explosiones y entidades del juego
 ├── Geometry.hs          # Funciones geométricas y matemáticas
@@ -75,6 +77,31 @@
 ✅ **Ejecución con tiempo** - Consideración de deltaTime entre frames  
 ✅ **AIExecutionResult** - Resultado estructurado de ejecución AI  
 
+## **Punto de Entrada y Bucle de Juego (implementado por Angel)**
+
+- `Main.hs`:
+  - Crea el estado inicial del torneo (ventana 1000x700, dos robots básicos: "aggressive" y "defensive").
+  - Llama a `playGame` para iniciar el bucle principal.
+
+- `Game.hs`:
+  - `GameState`: estado mínimo necesario para Gloss (tamaño de ventana, robots, proyectiles, tiempo).
+  - `drawGame`: dibuja cada robot como `rectangleSolid` (en píxeles, partiendo de tamaños en metros) y los proyectiles de forma simple.
+  - `updateGame`: por frame, construye el estado de IA, actualiza cada robot con `AI.updateRobotAI`, genera proyectiles y avanza posiciones según velocidades y `deltaTime`.
+
+### Cómo ejecutarlo
+
+- GHCi:
+  ```bash
+  ghci -package gloss
+  :load Main.hs
+  main
+  ```
+- GHC:
+  ```bash
+  ghc -package gloss Main.hs
+  ./Main   # (Windows: Main.exe)
+  ```
+
 ## **Cómo Usar los Módulos**
 
 ### **Cargar en GHCi (Recomendado)**
@@ -101,3 +128,40 @@ ghc -package containers -c Entities.hs
 - **GameEntity**: Las explosiones implementan correctamente la interfaz GameEntity
 
 Los módulos están **completamente funcionales** y listos para ser integrados en un sistema de juego más amplio.
+
+---
+
+## **🎮 COMMIT: Dibujo Sistema de Juego Visual **  (Fran)
+
+### **Nuevas Funcionalidades Implementadas:**
+
+#### **1. Sistema de Renderizado Visual (Game.hs)**
+- ✅ **Renderizado de robots**: Tanques con torretas, barras de vida y orientación
+- ✅ **Sistema de proyectiles**: Círculos naranjas con física de movimiento
+- ✅ **Interfaz de usuario**: Contador de tiempo, robots vivos y estadísticas
+- ✅ **Escalado dinámico**: Adaptación automática a cualquier resolución de ventana
+
+#### **2. Sistema de Imágenes de Fondo (gloss.juicy)**
+- ✅ **Carga de imágenes**: Soporte para PNG, JPG, BMP, GIF
+- ✅ **Escalado automático**: Las imágenes se adaptan al tamaño de ventana
+- ✅ **Fallback robusto**: Fondo sólido si la imagen no se carga
+- ✅ **Responsive**: Redimensionado en tiempo real
+
+#### **3. Sistema de Escalado Dinámico**
+- ✅ **Factor de escalado**: Basado en tamaño de ventana vs escenario base
+- ✅ **Escenario base**: 100x70 metros (1000x700 píxeles)
+- ✅ **Escalado proporcional**: Mantiene proporciones en todas las resoluciones
+- ✅ **UI responsive**: Texto y elementos se adaptan al tamaño de ventana
+
+
+### **Dependencias Añadidas:**
+- **gloss-juicy**: Para carga y renderizado de imágenes
+- **Graphics.Gloss**: Para el sistema de renderizado visual
+
+### **Características Técnicas:**
+- **Resolución base**: 1000x700 píxeles
+- **Escenario**: 100x70 metros (escalable)
+- **Tanques**: 8x8 metros (escalables)
+- **Proyectiles**: 0.5 metros de radio (escalables)
+- **FPS**: 60 frames por segundo
+- **Escalado**: Automático y responsive

@@ -270,9 +270,9 @@ data AIExecutionResult = AIExecutionResult
 -- Ejecuta una lista de comandos AI sobre un robot
 executeAICommands :: [BotCommand] -> Robot -> Scalar -> AIExecutionResult
 executeAICommands commands robot deltaTime = 
-  let (updatedRobot', newProjectiles, newExplosions) = 
+  let (updatedRobot', spawnedProjectiles', spawnedExplosions') = 
         foldl (executeCommand deltaTime) (robot, [], []) commands
-  in AIExecutionResult updatedRobot' newProjectiles newExplosions
+  in AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
 
 -- Ejecuta un comando individual
 executeCommand :: Scalar -> (Robot, [Projectile], [Explosion]) -> BotCommand -> (Robot, [Projectile], [Explosion])

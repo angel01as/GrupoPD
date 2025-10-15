@@ -26,10 +26,10 @@ instance WindowSizeState GameState where
 type MaybeEventHandler a = Event -> a -> Maybe a -- Recibe un evento y un estado a y devuelve Maybe a (Nothing si no maneja el evento, Just nuevoEstado si lo maneja)
 
 handleEvents :: [MaybeEventHandler gameState] -> Event -> gameState -> gameState -- Recibe una lista de manejadores de eventos, un evento y un estado, y devuelve el nuevo estado
-handleEvents handlers event gs = fromMaybe gs result -- Si result es Nothing devuelve el estado original gs, si es Just nuevoEstado devuelve nuevoEstado
+handleEvents handlers event gs = fromMaybe gs result -- fromMaybe: si result es Nothing devuelve gs, si es Just x devuelve x
   where
-    validHandlings = [ hd event gs | hd <- handlers, not (isNothing (hd event gs)) ]  
-    result         = if null validHandlings then Nothing else head validHandlings -- Intenta aplicar cada manejador de eventos al evento y al estado, y devuelve, en su caso, el resultado del primero que sea compatible
+    validHandlings = [ hd event gs | hd <- handlers, not (isNothing (hd event gs)) ] -- Filtra solo los manejadores que devuelven Just (no Nothing)
+    result         = if null validHandlings then Nothing else head validHandlings -- head: toma el primer elemento de la lista (el primer manejador válido)
 
 tryHandleResizing :: (WindowSizeState wss) => Event -> wss -> Maybe wss -- Manejador de eventos para redimensionar ventana
 tryHandleResizing event state =
