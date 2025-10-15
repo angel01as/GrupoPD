@@ -120,9 +120,9 @@ shootProjectile :: Robot -> Maybe Projectile
 shootProjectile r 
   | canShoot r = Just $ Proj
     { projectilePosition = robotPosition r
-    , projectileVelocity = prodByScalar 100 (angleFactor (turretOrientation (robotTurret r)))
-    , projectileVertices = [(0,0), (2,0), (2,2), (0,2)]
-    , projectileSize = (2, 2)
+    , projectileVelocity = prodByScalar 60 (angleFactor (turretOrientation (robotTurret r)))
+    , projectileVertices = [(0,0), (0.5,0), (0.5,0.5), (0,0.5)]
+    , projectileSize = (0.5, 0.5)
     , projectileOrientation = turretOrientation (robotTurret r)
     , projectileDamage = turretDamage (robotTurret r)
     }
@@ -142,18 +142,18 @@ createBasicRobot :: Position -> String -> Robot
 createBasicRobot pos behaviorName = Rob
   { robotPosition = pos
   , robotVelocity = (0, 0)
-  , robotSize = (20, 20)
-  , robotVertices = [(-10, -10), (10, -10), (10, 10), (-10, 10)]
+  , robotSize = (8, 8)
+  , robotVertices = [(-4, -4), (4, -4), (4, 4), (-4, 4)]
   , robotEnergy = 100
   , robotMaxEnergy = 100
-  , robotRadarRange = 50
+  , robotRadarRange = 25
   , robotOrientation = 0
   , robotTurret = Turr
     { turretOrientation = 0
     , turretCooldown = 0
     , turretMaxCooldown = 1.0
     , turretDamage = 25
-    , turretRange = 100
+    , turretRange = 30
     }
   , robotMemory = Map.empty
   , robotBehavior = behaviorName
