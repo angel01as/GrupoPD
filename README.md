@@ -34,6 +34,8 @@
 
 ```
 ├── AI.hs                # Sistema de comportamientos AI y DSL
+├── Game.hs              # Bucle principal (draw/update) y GameState del juego
+├── Main.hs              # Punto de entrada: crea estado inicial y lanza playGame
 ├── Robot.hs             # Definición de robots y torretas
 ├── Entities.hs          # Proyectiles, explosiones y entidades del juego
 ├── Geometry.hs          # Funciones geométricas y matemáticas
@@ -74,6 +76,31 @@
 ✅ **Capa extra** - Sistema de nombres para evitar dependencias circulares  
 ✅ **Ejecución con tiempo** - Consideración de deltaTime entre frames  
 ✅ **AIExecutionResult** - Resultado estructurado de ejecución AI  
+
+## **Punto de Entrada y Bucle de Juego (implementado por Angel)**
+
+- `Main.hs`:
+  - Crea el estado inicial del torneo (ventana 1000x700, dos robots básicos: "aggressive" y "defensive").
+  - Llama a `playGame` para iniciar el bucle principal.
+
+- `Game.hs`:
+  - `GameState`: estado mínimo necesario para Gloss (tamaño de ventana, robots, proyectiles, tiempo).
+  - `drawGame`: dibuja cada robot como `rectangleSolid` (en píxeles, partiendo de tamaños en metros) y los proyectiles de forma simple.
+  - `updateGame`: por frame, construye el estado de IA, actualiza cada robot con `AI.updateRobotAI`, genera proyectiles y avanza posiciones según velocidades y `deltaTime`.
+
+### Cómo ejecutarlo
+
+- GHCi:
+  ```bash
+  ghci -package gloss
+  :load Main.hs
+  main
+  ```
+- GHC:
+  ```bash
+  ghc -package gloss Main.hs
+  ./Main   # (Windows: Main.exe)
+  ```
 
 ## **Cómo Usar los Módulos**
 

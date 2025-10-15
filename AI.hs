@@ -20,9 +20,9 @@ module AI (
   aggressiveBot, defensiveBot, exampleBot
 ) where
 
-import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, canShoot, shootProjectile, afterShooting, updateTurretCooldown)
-import Entities (Projectile(..), GameEntity(..), Explosion(..), createExplosion)
-import Geometry (Position, Angle, Scalar, distanceBetween, angleToTarget)
+import Robot (Robot(..), MovementAction(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, shootProjectile, afterShooting, updateTurretCooldown)
+import Entities (Projectile(..), GameEntity(..), Explosion(..))
+import Geometry (Angle, Scalar, distanceBetween, angleToTarget)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.List (minimumBy)
@@ -273,10 +273,10 @@ data AIExecutionResult = AIExecutionResult
 
 -- Ejecuta una lista de comandos AI sobre un robot
 executeAICommands :: [BotCommand] -> Robot -> Scalar -> AIExecutionResult
-executeAICommands commands robot deltaTime = 
-  let (updatedRobot', newProjectiles, newExplosions) = 
+executeAICommands commands robot _deltaTime = 
+  let (updatedRobot', spawnedProjectiles', spawnedExplosions') = 
         foldl executeCommand (robot, [], []) commands
-  in AIExecutionResult updatedRobot' newProjectiles newExplosions
+  in AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
 
 -- Ejecuta un comando individual
 executeCommand :: (Robot, [Projectile], [Explosion]) -> BotCommand -> (Robot, [Projectile], [Explosion])
@@ -286,7 +286,7 @@ executeCommand (robot, projectiles, explosions) ShootCommand =
   case shootProjectile robot of
     Just projectile -> (afterShooting robot, projectile : projectiles, explosions)
     Nothing -> (robot, projectiles, explosions)
-executeCommand (robot, projectiles, explosions) (WaitCommand time) = 
+executeCommand (robot, projectiles, explosions) (WaitCommand _time) = 
   (robot, projectiles, explosions) -- El wait se maneja a nivel de instrucción
 executeCommand (robot, projectiles, explosions) (SetMemoryCommand key value) = 
   (robot { robotMemory = Map.insert key value (robotMemory robot) }, projectiles, explosions)

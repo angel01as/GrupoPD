@@ -75,8 +75,12 @@ drawGame gs = Pictures [robotsPic, projectilesPic]
     projectilesPic = Pictures (map drawProjectile (gsProjectiles gs))
 
     drawRobot :: Robot -> Picture
-    drawRobot r = let (x, y) = position r in
-      Color (makeColorI 60 130 240 255) $ Translate (meter2Pixel x) (meter2Pixel y) $ Polygon (map toPx (vertices r))
+    drawRobot r =
+      let (x, y) = position r
+          (w, h) = size r
+      in Color (makeColorI 60 130 240 255)
+         $ Translate (meter2Pixel x) (meter2Pixel y)
+         $ rectangleSolid (meter2Pixel w) (meter2Pixel h)
 
     drawProjectile :: Projectile -> Picture
     drawProjectile p = let (x, y) = position p in
