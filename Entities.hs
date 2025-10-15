@@ -2,12 +2,13 @@
 
 module Entities (
   -- Con tipo data(..) se exporta todo lo que tiene, constructor incluido.
-  GameEntity(..), 
-  Stage(..), Statistics(..), Projectile(..), Explosion(..),
+  GameEntity(..), Projectile(..), Explosion(..), ID,
   createExplosion, updateExplosion, isExplosionActive, isExplosionDamaging
 ) where
 
 import Geometry (Size, Position, Scalar, Angle, Point, Velocity, add2D, prodByScalar, rotateVertices, translateVertices)
+
+type ID = Int
 
 class GameEntity a where
   position :: a -> Position
@@ -34,19 +35,9 @@ class GameEntity a where
       rotatedGE = setOrientation ge (orientation ge + angleDiff)
       rotatedVerts = rotateVertices (vertices ge) angleDiff
 
-data Stage = Stag
-  {
-    stageSize :: Size
-  } deriving(Show , Eq)
-
-data Statistics = Stats
-  { robots :: Int,
-    projectiles :: Int,
-    explotions :: Int
-  } deriving(Show , Eq)
-
 data Projectile = Proj
   {
+    projectileID :: ID,
     projectilePosition  :: Position,
     projectileVelocity  :: Velocity,
     projectileVertices  :: [Point],
@@ -57,6 +48,7 @@ data Projectile = Proj
 
 data Explosion = Expl
   {
+    explosionID :: ID,
     explosionPosition :: Position,
     explosionRadius :: Scalar,
     explosionMaxRadius :: Scalar,

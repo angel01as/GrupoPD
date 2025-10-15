@@ -36,13 +36,8 @@ subVec (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
 
 -- Genera una lista de vértices (puntos) a partir de puntos base y un ángulo de rotación.
 rotateVertices :: [Point] -> Angle -> [Point]
-rotateVertices ps theta = map (rotarCentro theta centro) ps
+rotateVertices ps theta = map (rotarCentro theta (centroid ps)) ps
   where
-    centro :: Point
-    centro = prodByScalar (1/numPts) (foldr1 add2D ps)
-      where
-        numPts = fromIntegral $ length ps
-
     rotarCentro :: Angle -> Point -> Point -> Point
     rotarCentro t (cx, cy) (x, y) =
       let dx = x - cx
@@ -52,6 +47,12 @@ rotateVertices ps theta = map (rotarCentro theta centro) ps
           x' = dx * c - dy * s
           y' = dx * s + dy * c
       in (x' + cx, y' + cy)
+
+-- Calcula el centroide
+centroid :: [Point] -> Point
+centroid ps = prodByScalar (1/numPts) (foldr1 add2D ps)
+  where
+    numPts = fromIntegral $ length ps
 
 -- Aplica una traslación a una lista de vértices (puntos)
 translateVertices :: [Point] -> Vector -> [Point]
@@ -99,3 +100,9 @@ prodByScalar t (vx, vy) = (t * vx, t * vy)
 -- Da como Scalar2D el factor de proyección sobre el ángulo dado.
 angleFactor :: Angle -> Scalar2D
 angleFactor a = (cos a, sin a)
+
+clampRange :: Scalar -> Scalar2D -> Scalar
+clampRange value (minV, maxV)
+              | value > maxV = maxV
+              | value < minV = minV
+              | otherwise    = value

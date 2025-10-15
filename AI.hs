@@ -6,7 +6,6 @@ module AI (
   BotCondition(..),
   BotCommand(..),
   BotInstruction(..),
-  GameState(..),
   AIExecutionResult(..),
   -- Funciones del DSL
   move, moveBackward, rotate, multiplyVelocity, shoot, wait, ifThen, ifThenElse, sequence,
@@ -20,24 +19,18 @@ module AI (
   aggressiveBot, defensiveBot, exampleBot
 ) where
 
-import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, canShoot, shootProjectile, afterShooting, updateTurretCooldown)
-import Entities (Projectile(..), GameEntity(..), Explosion(..), createExplosion)
-import Geometry (Position, Angle, Scalar, distanceBetween, angleToTarget)
+import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, canShoot, shootProjectile, afterShooting, updateTurretCooldown, multiplyMovementAction)
+import Entities (Projectile(..), GameEntity(..), Explosion(..), createExplosion, ID)
+import Geometry (Position, Angle, Scalar, distanceBetween, angleToTarget, Size)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.List (minimumBy)
 import Prelude hiding (sequence, repeat)
+import GameState
 
 -- ============================================================================
 -- DSL PARA ACCIONES DEL BOT
 -- ============================================================================
-
--- Tipo de datos para representar el estado del juego
-data GameState = GameState
-  { gameRobots :: [Robot]   -- Lista de todos los robots
-  , gameProjectiles :: [Projectile] -- Lista de todos los proyectiles
-  , gameTime :: Scalar -- Tiempo actual del juego
-  } deriving (Show, Eq)
 
 -- Comandos básicos que puede ejecutar un bot
 data BotCommand
@@ -178,9 +171,9 @@ evalCondition (Or cond1 cond2) gs robot =
   evalCondition cond1 gs robot || evalCondition cond2 gs robot
 
 -- Encuentra el enemigo más cercano
-findNearestEnemy :: Robot -> [Robot] -> Maybe Robot
+findNearestEnemy :: Robot -> Map.Map ID Robot -> Maybe Robot
 findNearestEnemy robot enemies = 
-  let aliveEnemies = filter (\r -> r /= robot && isRobotAlive r) enemies
+  let aliveEnemies = filter (\r -> r /= robot && isRobotAlive r) (Map.elems enemies)
   in if null aliveEnemies 
      then Nothing
      else Just (minimumBy (\a b -> compare (distanceBetween (position robot) (position a)) 
@@ -250,11 +243,14 @@ defensiveBot gs robot =
       (sequence [
         -- Patrullar
         setMemory "mode" (StringValue "patrolling"),
-        move 0.3,
+        move 1,
         rotate (pi/8),
         wait 0.2
       ])
     )
+
+stupidBot :: BotBehavior
+stupidBot gs robot = move 1
 
 -- Bot de ejemplo simple
 exampleBot :: BotBehavior
@@ -275,22 +271,26 @@ data AIExecutionResult = AIExecutionResult
 executeAICommands :: [BotCommand] -> Robot -> Scalar -> AIExecutionResult
 executeAICommands commands robot deltaTime = 
   let (updatedRobot', newProjectiles, newExplosions) = 
-        foldl executeCommand (robot, [], []) commands
+        foldl (executeCommand deltaTime) (robot, [], []) commands
   in AIExecutionResult updatedRobot' newProjectiles newExplosions
 
 -- Ejecuta un comando individual
-executeCommand :: (Robot, [Projectile], [Explosion]) -> BotCommand -> (Robot, [Projectile], [Explosion])
-executeCommand (robot, projectiles, explosions) (MovementCommand action) = 
-  (updateRobotVelocity robot action, projectiles, explosions)
-executeCommand (robot, projectiles, explosions) ShootCommand = 
+executeCommand :: Scalar -> (Robot, [Projectile], [Explosion]) -> BotCommand -> (Robot, [Projectile], [Explosion])
+executeCommand deltaTime (robot, projectiles, explosions) (MovementCommand action) = 
+  (updateRobotVelocity robot (multiplyMovementAction deltaTime action), projectiles, explosions)
+
+executeCommand _ (robot, projectiles, explosions) ShootCommand = 
   case shootProjectile robot of
     Just projectile -> (afterShooting robot, projectile : projectiles, explosions)
     Nothing -> (robot, projectiles, explosions)
-executeCommand (robot, projectiles, explosions) (WaitCommand time) = 
+
+executeCommand deltaTime (robot, projectiles, explosions) (WaitCommand time) = 
   (robot, projectiles, explosions) -- El wait se maneja a nivel de instrucción
-executeCommand (robot, projectiles, explosions) (SetMemoryCommand key value) = 
+
+executeCommand _ (robot, projectiles, explosions) (SetMemoryCommand key value) = 
   (robot { robotMemory = Map.insert key value (robotMemory robot) }, projectiles, explosions)
-executeCommand (robot, projectiles, explosions) (ClearMemoryCommand key) = 
+
+executeCommand _ (robot, projectiles, explosions) (ClearMemoryCommand key) = 
   (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
 
 -- Actualiza un robot con su comportamiento AI
@@ -316,4 +316,5 @@ updateRobotAI robot gs deltaTime =
 getBehaviorByName :: String -> BotBehavior
 getBehaviorByName "aggressive" = aggressiveBot
 getBehaviorByName "defensive" = defensiveBot
+getBehaviorByName "stupid" = stupidBot
 getBehaviorByName _ = aggressiveBot -- Comportamiento por defecto

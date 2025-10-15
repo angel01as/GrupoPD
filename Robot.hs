@@ -14,7 +14,8 @@ module Robot (
   updateTurretCooldown,
   shootProjectile,
   afterShooting,
-  createBasicRobot
+  createBasicRobot,
+  multiplyMovementAction
 ) where
 
 import Entities
@@ -23,6 +24,7 @@ import qualified Data.Map as Map
 
 data Robot = Rob
   { 
+    robotID :: ID,
     robotPosition   :: Position, 
     robotVelocity   :: Velocity,
     robotSize  :: Size,
@@ -66,6 +68,13 @@ data MovementAction
   | Rotate Angle
   | MultiplyVelocity Scalar
   deriving(Show , Eq)
+
+-- Aplica un factor multiplicador sobre la acción.
+multiplyMovementAction :: Scalar -> MovementAction -> MovementAction
+multiplyMovementAction factor (MoveForward s) = MoveForward (factor * s)
+multiplyMovementAction factor (MoveBackward s) = MoveBackward (factor * s)
+multiplyMovementAction factor (Rotate a) = Rotate (factor * a)
+multiplyMovementAction factor (MultiplyVelocity s) = MultiplyVelocity (factor * s)
 
 -- Tipo de datos flexible para almacenar diferentes tipos de información
 data MemoryValue 
@@ -138,12 +147,12 @@ afterShooting r = r { robotTurret = turret { turretCooldown = turretMaxCooldown 
 -- ============================================================================
 
 -- Crea un robot básico con comportamiento AI
-createBasicRobot :: Position -> String -> Robot
-createBasicRobot pos behaviorName = Rob
+createBasicRobot :: Position -> String -> ID -> Robot
+createBasicRobot pos behaviorName id = Rob
   { robotPosition = pos
   , robotVelocity = (0, 0)
   , robotSize = (20, 20)
-  , robotVertices = [(-10, -10), (10, -10), (10, 10), (-10, 10)]
+  , robotVertices = map (add2D pos) [(-10, -10), (10, -10), (10, 10), (-10, 10)]
   , robotEnergy = 100
   , robotMaxEnergy = 100
   , robotRadarRange = 50
@@ -158,5 +167,6 @@ createBasicRobot pos behaviorName = Rob
   , robotMemory = Map.empty
   , robotBehavior = behaviorName
   , robotLastUpdateTime = 0
-  , robotCurrentInstruction = Nothing
+  , robotCurrentInstruction = Nothing,
+    robotID = id
   }
