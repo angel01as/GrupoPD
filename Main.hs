@@ -23,7 +23,7 @@ main = do
                                 gameProjectiles = Map.fromList [],
                                 gameTime = 0,
                                 gameExplosions = Map.fromList [],
-                                gameStageSize = (100, 100),
+                                gameStageSize = (100, 70),
                                 gameBackground = backgroundImage
                             }
     playGame initialState

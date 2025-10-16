@@ -44,32 +44,32 @@ gmap f m = Map.elems (fmap f m)
 -- gfilter es un filter sobre un Map que devuelve el resultado como lista.
 gfilter :: (Ord k) => (v -> Bool) -> Map.Map k v -> [v]
 gfilter f m = Map.elems (Map.filter f m)
+
 -- Dimensiones base del juego. Usar Scalar para cáculos internos y Pixel para la pantalla., incluso si ambos son Float.
 
 type Pixel = Float
 
 -- Factor de escalado dinámico basado en el tamaño de ventana
--- Escenario base: 1000x700 píxeles = 100x70 metros
 baseWindowSize :: (Int, Int)
 baseWindowSize = (1000, 700)
 
-baseSceneSize :: (Scalar, Scalar) -- metros
-baseSceneSize = (100, 70)
-
 -- Calcula el factor de escalado dinámico
-getMeter2PixelFactor :: (Int, Int) -> Pixel
-getMeter2PixelFactor (windowWidth, windowHeight) = 
-  min (fromIntegral windowWidth / fst baseSceneSize) -- fst: toma el primer elemento de la tupla (ancho)
-      (fromIntegral windowHeight / snd baseSceneSize) -- snd: toma el segundo elemento de la tupla (alto)
+getMeter2PixelFactor :: GameState -> Pixel
+getMeter2PixelFactor gs = 
+  min (fromIntegral windowWidth / sceneWidth)
+      (fromIntegral windowHeight / sceneHeight)
+      where
+        (windowWidth, windowHeight) = gameWindowSize gs
+        (sceneWidth, sceneHeight) = gameStageSize gs
 
-getPixel2MeterFactor :: (Int, Int) -> Scalar
-getPixel2MeterFactor windowSize = 1 / getMeter2PixelFactor windowSize
+getPixel2MeterFactor :: GameState -> Scalar
+getPixel2MeterFactor gs = 1 / getMeter2PixelFactor gs
 
-pixel2Meter :: (Int, Int) -> Pixel -> Scalar
-pixel2Meter windowSize px = px * getPixel2MeterFactor windowSize
+pixel2Meter :: GameState -> Pixel -> Scalar
+pixel2Meter gs px = px * getPixel2MeterFactor gs
 
-meter2Pixel :: (Int, Int) -> Scalar -> Pixel
-meter2Pixel windowSize m = m * getMeter2PixelFactor windowSize
+meter2Pixel :: GameState -> Scalar -> Pixel
+meter2Pixel gs m = m * getMeter2PixelFactor gs
 
 
 playGame :: GameState -> IO()
@@ -77,7 +77,7 @@ playGame initialState = play window backgroundColor fps initialState drawGame (h
     where
         fps = 60
         backgroundColor = white
-        window = InWindow "Juego de tanques " (windowSize initialState) (100, 100)
+        window = InWindow "Juego de tanques " (gameWindowSize initialState) (100, 100)
 
 -- === CARGA DE IMÁGENES ===
 -- Función para cargar imagen de fondo (retorna Nothing si falla)
@@ -89,31 +89,32 @@ drawGame :: GameState -> Picture
 drawGame gs = Pictures [background, robotsPic, projectilesPic, ui, createBorder]
   where
     windowSize = gameWindowSize gs
-    (windowWidth, windowHeight) = (fromIntegral (fst windowSize), fromIntegral (snd windowSize)) -- fst/snd: extraen ancho y alto de la tupla (Int,Int)
+    (windowWidth, windowHeight) = (fromIntegral (fst windowSize), fromIntegral (snd windowSize))
+    (baseWindowWidth, baseWindowHeight) = (fromIntegral $ fst baseWindowSize, fromIntegral $ snd baseWindowSize)
     
     createBorder :: Picture
-    createBorder = Color red $ rectangleWire (meter2Pixel windowSize sx) (meter2Pixel windowSize sy) where (sx, sy) = gameStageSize gs    
+    createBorder = Color red $ rectangleWire (meter2Pixel gs sx) (meter2Pixel gs sy) where (sx, sy) = gameStageSize gs    
 
     -- Usar imagen de fondo si está disponible, sino usar color sólido
     background = case gameBackground gs of
-      Just bgImage -> Scale (windowWidth / 1000) (windowHeight / 700) bgImage
+      Just bgImage -> Scale (windowWidth / baseWindowWidth) (windowHeight / baseWindowHeight) bgImage
       Nothing      -> Color (makeColor 0.1 0.1 0.1 1.0) $ rectangleSolid windowWidth windowHeight
     
-    robotsPic = Pictures (gmap (drawRobot windowSize) (gameRobots gs))
-    projectilesPic = Pictures (gmap (drawProjectile windowSize) (gameProjectiles gs))
+    robotsPic = Pictures (gmap drawRobot (gameRobots gs))
+    projectilesPic = Pictures (gmap drawProjectile (gameProjectiles gs))
     ui = drawUI gs
 
     -- Convierte coordenadas del mundo a píxeles
     toPx :: (Scalar, Scalar) -> (Float, Float)
-    toPx (x, y) = (meter2Pixel windowSize x, meter2Pixel windowSize y)
+    toPx (x, y) = (meter2Pixel gs x, meter2Pixel gs y)
 
     -- Convierte ángulos de radianes a grados para Gloss
     radToDeg :: Angle -> Float
     radToDeg = rad2deg
 
     -- Renderiza un robot completo (tanque + cañón + barra de salud)
-    drawRobot :: (Int, Int) -> Robot -> Picture
-    drawRobot windowSize r = Pictures [tank, turret, healthBar]
+    drawRobot :: Robot -> Picture
+    drawRobot r = Pictures [tank, turret, healthBar]
       where
         (x, y) = position r
         (sx, sy) = size r
@@ -122,32 +123,32 @@ drawGame gs = Pictures [background, robotsPic, projectilesPic, ui, createBorder]
         
         -- Tanque (cuerpo del robot)
         tank = Color (if isRobotAlive r then (makeColor 0.2 0.4 0.2 1.0) else (makeColor 0.5 0.5 0.5 1.0)) $
-               Translate (meter2Pixel windowSize x) (meter2Pixel windowSize y) $
+               Translate (meter2Pixel gs x) (meter2Pixel gs y) $
                Rotate robotOrientation $
-               rectangleSolid (meter2Pixel windowSize sx) (meter2Pixel windowSize sy)
+               rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
         
         -- Cañón (torreta)
-        turretLength = meter2Pixel windowSize sx * 1.5  -- Cañón más largo
-        turretWidth = meter2Pixel windowSize sy * 0.3   -- Ancho más grueso
+        turretLength = meter2Pixel gs sx * 1.5  -- Cañón más largo
+        turretWidth = meter2Pixel gs sy * 0.3   -- Ancho más grueso
         turret = Color (makeColor 0.1 0.2 0.1 1.0) $
-                 Translate (meter2Pixel windowSize x) (meter2Pixel windowSize y) $
+                 Translate (meter2Pixel gs x) (meter2Pixel gs y) $
                  Rotate turretAngle $
                  Translate (turretLength/4) 0 $
                  rectangleSolid (turretLength/2) (turretWidth/2)
         
         -- Barra de salud
-        healthBar = drawHealthBar windowSize r
+        healthBar = drawHealthBar r
 
     -- Renderiza la barra de salud de un robot
-    drawHealthBar :: (Int, Int) -> Robot -> Picture
-    drawHealthBar windowSize r = Pictures [background, health]
+    drawHealthBar :: Robot -> Picture
+    drawHealthBar r = Pictures [background, health]
       where
         (x, y) = position r
         (sx, sy) = size r
         
         -- Posición de la barra (arriba del robot)
-        barY = meter2Pixel windowSize y + meter2Pixel windowSize sy/2 + 15
-        barWidth = meter2Pixel windowSize sx * 1.2
+        barY = meter2Pixel gs y + meter2Pixel gs sy/2 + 15
+        barWidth = meter2Pixel gs sx * 1.2
         barHeight = 6
         
         -- Porcentaje de salud
@@ -155,33 +156,31 @@ drawGame gs = Pictures [background, robotsPic, projectilesPic, ui, createBorder]
         
         -- Fondo de la barra (rojo)
         background = Color red $
-                     Translate (meter2Pixel windowSize x) barY $
+                     Translate (meter2Pixel gs x) barY $
                      rectangleSolid (barWidth/2) (barHeight/2)
         
         -- Barra de salud (verde)
         health = Color green $
-                 Translate (meter2Pixel windowSize x - barWidth/4 + (barWidth/2 * healthPercent)/2) barY $
+                 Translate (meter2Pixel gs x - barWidth/4 + (barWidth/2 * healthPercent)/2) barY $
                  rectangleSolid (barWidth/2 * healthPercent) (barHeight/2)
 
     -- Renderiza un proyectil (círculo)
-    drawProjectile :: (Int, Int) -> Projectile -> Picture
-    drawProjectile windowSize p = Color orange $ 
+    drawProjectile :: Projectile -> Picture
+    drawProjectile p = Color orange $ 
       uncurry Translate (toPx (position p)) $ -- uncurry convierte tupla (x,y) en argumentos separados para Translate
-      circleSolid (meter2Pixel windowSize 0.5) -- Radio de 0.5 metros
+      circleSolid (meter2Pixel gs 0.5) -- Radio de 0.5 metros
 
     -- Renderiza la interfaz de usuario
     drawUI :: GameState -> Picture
     drawUI gs = Pictures [timeDisplay, robotCount]
       where
-        windowSize = gameWindowSize gs
-        (windowWidth, windowHeight) = (fromIntegral (fst windowSize), fromIntegral (snd windowSize)) -- fst/snd: extraen ancho y alto de la tupla (Int,Int)
-        
+
         -- Posiciones responsive basadas en el tamaño de ventana
         leftMargin = -windowWidth/2 + 20
         topMargin = windowHeight/2 - 20
         
         -- Escala responsive basada en el tamaño de ventana
-        textScale = min (windowWidth/1000) (windowHeight/700) * 0.2 -- min: toma el menor de los dos valores para mantener proporciones
+        textScale = min (windowWidth / baseWindowWidth) (windowHeight / baseWindowHeight) * 0.2 -- min: toma el menor de los dos valores para mantener proporciones
         
         timeDisplay = Color white $ Translate leftMargin (topMargin - 30) $ Scale textScale textScale $ 
                       Text ("Tiempo: " ++ show (round (gameTime gs) :: Int) ++ "s")
