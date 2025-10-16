@@ -128,12 +128,15 @@ updateTurretCooldown r deltaTime = r { robotTurret = turret { turretCooldown = m
 shootProjectile :: Robot -> Maybe Projectile
 shootProjectile r 
   | canShoot r = Just $ Proj
-    { projectilePosition = robotPosition r
-    , projectileVelocity = prodByScalar 60 (angleFactor (turretOrientation (robotTurret r)))
-    , projectileVertices = [(0,0), (0.5,0), (0.5,0.5), (0,0.5)]
-    , projectileSize = (0.5, 0.5)
-    , projectileOrientation = turretOrientation (robotTurret r)
-    , projectileDamage = turretDamage (robotTurret r)
+    { 
+      projectilePosition = position r,
+      projectileVelocity = prodByScalar 60 (angleFactor (turretOrientation (robotTurret r))),
+      projectileVertices = [(0,0), (0.5,0), (0.5,0.5), (0,0.5)],
+      projectileSize = (0.5, 0.5),
+      projectileOrientation = turretOrientation (robotTurret r),
+      projectileDamage = turretDamage (robotTurret r),
+      projectileID = -1,
+      projectileOwnerID = robotID r
     }
   | otherwise = Nothing
 
@@ -148,7 +151,7 @@ afterShooting r = r { robotTurret = turret { turretCooldown = turretMaxCooldown 
 
 -- Crea un robot básico con comportamiento AI
 createBasicRobot :: Position -> String -> ID -> Robot
-createBasicRobot pos behaviorName id = Rob
+createBasicRobot pos behaviorName newID = Rob
   { robotPosition = pos
   , robotVelocity = (0, 0)
   , robotSize = (8, 8)
@@ -161,12 +164,12 @@ createBasicRobot pos behaviorName id = Rob
     { turretOrientation = 0
     , turretCooldown = 0
     , turretMaxCooldown = 1.0
-    , turretDamage = 25
+    , turretDamage = 20
     , turretRange = 30
     }
   , robotMemory = Map.empty
   , robotBehavior = behaviorName
   , robotLastUpdateTime = 0
   , robotCurrentInstruction = Nothing,
-    robotID = id
+    robotID = newID
   }
