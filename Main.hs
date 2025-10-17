@@ -3,6 +3,7 @@ import Robot (createBasicRobot)
 import GameState
 
 import qualified Data.Map as Map (fromList)
+import qualified Data.Set as Set
 
 -- Punto de entrada al juego.
 
@@ -24,6 +25,7 @@ main = do
                                 gameTime = 0,
                                 gameExplosions = Map.fromList [],
                                 gameStageSize = (100, 70),
-                                gameBackground = backgroundImage
+                                gameBackground = backgroundImage,
+                                gameKeysPressed = Set.empty
                             }
     playGame initialState

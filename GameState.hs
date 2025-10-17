@@ -1,10 +1,14 @@
 module GameState where
 
 import qualified Data.Map as Map
+import qualified Data.Set as Set
+
 import Robot
 import Entities
 import Graphics.Gloss
+import Graphics.Gloss.Interface.Pure.Game
 import Geometry
+
 -- Tipo de datos para representar el estado del juego
 data GameState = GameState
   { 
@@ -14,5 +18,6 @@ data GameState = GameState
     gameTime :: Scalar, -- Tiempo actual del juego
     gameWindowSize :: (Int, Int),
     gameStageSize :: Size, -- Tamaño interno del escenario.
-    gameBackground :: Maybe Picture
+    gameBackground :: Maybe Picture,
+    gameKeysPressed :: Set.Set Key
   } deriving (Show, Eq)

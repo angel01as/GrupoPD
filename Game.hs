@@ -13,6 +13,7 @@ import qualified AI
 import GameState
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Collisions(checkCollisions, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
 
@@ -23,6 +24,16 @@ class WindowSizeState a where -- Cualquier tipo a que quiera comportarse como un
 instance WindowSizeState GameState where
   windowSize = gameWindowSize
   setWindowSize s sz = s { gameWindowSize = sz }
+
+class KeysPressedState a where -- Cualquier tipo a que quiera comportarse como un estado con teclas presionadas debe implementar estas funciones
+  keysPressed :: a -> Set.Set Key
+  addKey      :: a -> Key -> a
+  deleteKey   :: a -> Key -> a
+
+instance KeysPressedState GameState where
+  keysPressed   = gameKeysPressed -- Devuelve el conjunto de teclas presionadas del estado
+  addKey s k    = s { gameKeysPressed = Set.insert k (gameKeysPressed s) } -- crea una copia del estado con la tecla k añadida al conjunto
+  deleteKey s k = s { gameKeysPressed = Set.delete k (gameKeysPressed s) } -- crea una copia del estado con la tecla k eliminada del conjunto
 
 -- Controlador de eventos con Maybe
 type MaybeEventHandler a = Event -> a -> Maybe a -- Recibe un evento y un estado a y devuelve Maybe a (Nothing si no maneja el evento, Just nuevoEstado si lo maneja)
@@ -38,6 +49,13 @@ tryHandleResizing event state =
   case event of
     EventResize size -> Just $ setWindowSize state size
     _                -> Nothing
+
+tryHandleKeys :: (KeysPressedState kps) => Event -> kps -> Maybe kps -- Manejador de eventos para teclas
+tryHandleKeys event state = -- Si el evento es una tecla presionada o liberada, actualiza el estado
+  case event of
+    EventKey k Down _ _ -> Just $ addKey state k -- Si la tecla se presiona, la añade al conjunto
+    EventKey k Up   _ _ -> Just $ deleteKey state k
+    _                   -> Nothing
 
 -- gmap es un fmap sobre un Map que devuelve el resultado como lista.
 gmap :: (Ord k) => (v -> w) -> Map.Map k v -> [w]
@@ -75,11 +93,15 @@ meter2Pixel gs m = m * getMeter2PixelFactor gs
 
 
 playGame :: GameState -> IO()
-playGame initialState = play window backgroundColor fps initialState drawGame (handleEvents [tryHandleResizing]) updateGame
+playGame initialState = play window backgroundColor fps initialState drawGame (handleEvents [tryHandleResizing, tryHandleKeys]) updateWithReset
     where
         fps = 60
         backgroundColor = white
         window = InWindow "Juego de tanques " (gameWindowSize initialState) (100, 100)
+        updateWithReset :: Float -> GameState -> GameState
+        updateWithReset dt gs
+          | (Set.member (Char 'r') (gameKeysPressed gs)) = initialState -- Reiniciamos el juego al pulsar 'r'
+          | otherwise = updateGame dt gs
 
 -- === CARGA DE IMÁGENES ===
 -- Función para cargar imagen de fondo (retorna Nothing si falla)
