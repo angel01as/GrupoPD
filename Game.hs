@@ -234,7 +234,6 @@ updateGame deltaTime oldState = finalState { gameTime = gameTime oldState + delt
             gameProjectiles = Map.filter (\p -> isInBounds (position p) (gameStageSize oldState)) $ fmap (applyPhisics False) (gameProjectiles oldState),
             gameExplosions = Map.filter isExplosionActive $ fmap ((flip updateExplosion) deltaTime) (gameExplosions oldState)
         }
-        -- TODO: Faltan las explosiones.
         where
         -- Aplica la física sobre la entidad, teniendo en cuenta el deltaTime
         applyPhisics :: GameEntity a => Bool -> a -> a
