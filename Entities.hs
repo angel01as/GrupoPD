@@ -55,7 +55,8 @@ data Explosion = Expl
     explosionMaxRadius :: Scalar,
     explosionDamage :: Scalar,
     explosionTime :: Scalar,
-    explosionMaxTime :: Scalar
+    explosionMaxTime :: Scalar,
+    explosionVertices :: [Point]
   } deriving (Show, Eq)
 
 instance GameEntity Projectile where
@@ -84,8 +85,20 @@ createExplosion pos maxRadius damage maxTime newID = Expl
     explosionDamage = damage,
     explosionTime = 0,
     explosionMaxTime = maxTime,
-    explosionID = newID
+    explosionID = newID,
+    explosionVertices = generateExplosionVertices pos 0
   }
+
+-- Genera vértices para una explosión circular
+generateExplosionVertices :: Position -> Scalar -> [Point]
+generateExplosionVertices (x, y) radius = 
+  let numPoints :: Int
+      numPoints = 16
+      angleStep = 2 * pi / fromIntegral numPoints
+      points = [ (x + radius * cos (fromIntegral i * angleStep), 
+                 y + radius * sin (fromIntegral i * angleStep)) 
+               | i <- [0..numPoints-1] ]
+  in points
 
 -- Actualiza una explosión con el tiempo transcurrido
 updateExplosion :: Explosion -> Scalar -> Explosion
@@ -93,8 +106,11 @@ updateExplosion e deltaTime =
   let newTime = explosionTime e + deltaTime
       progress = min 1.0 (newTime / explosionMaxTime e)
       newRadius = explosionMaxRadius e * progress
-  in e { explosionTime = newTime
-       , explosionRadius = newRadius
+      newVertices = generateExplosionVertices (explosionPosition e) newRadius
+  in e { 
+        explosionTime = newTime,
+        explosionRadius = newRadius,
+        explosionVertices = newVertices
        }
 
 -- Verifica si una explosión está activa

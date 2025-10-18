@@ -15,7 +15,7 @@ import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-import Collisions(checkCollisions, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
+import Collisions(checkCollision, checkCollisions, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
 
 class WindowSizeState a where -- Cualquier tipo a que quiera comportarse como un estado con tamaño de ventana debe implementar estas funciones
   windowSize    :: a -> (Int, Int) -- Devuelve el tamaño de la ventana (ancho, alto)
@@ -100,7 +100,7 @@ playGame initialState = play window backgroundColor fps initialState drawGame (h
         window = InWindow "Juego de tanques " (gameWindowSize initialState) (100, 100)
         preUpdateGame :: Float -> GameState -> GameState
         preUpdateGame dt gs
-          | Set.member (Char 'r') (gameKeysPressed gs) = initialState { gameSimulationSpeed = gameSimulationSpeed gs, gameDebugInfo = (gameDebugInfo gs)} -- Reiniciamos el juego al pulsar 'r'. Nótese que initialState no tiene 'r' pulsado y no se volverá a añadir hasta que se suelte y vuelva pulsar la tecla.
+          | Set.member (Char 'r') (gameKeysPressed gs) = initialState { gameSimulationSpeed = gameSimulationSpeed gs, gameDebugInfo = gameDebugInfo gs, gameWindowSize = gameWindowSize gs} -- Reiniciamos el juego al pulsar 'r'. Nótese que initialState no tiene 'r' pulsado y no se volverá a añadir hasta que se suelte y vuelva pulsar la tecla.
           | Set.member (Char 'd') keys = updateGame dt (gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys }) -- Cambiamos el modo debug y limpiamos la tecla.
           | Set.member (Char '1') keys = updateGame dt (gs { gameSimulationSpeed = 0.1 }) -- Cambiamos la velocidad de simulación.
           | Set.member (Char '2') keys = updateGame dt (gs { gameSimulationSpeed = 0.25 })
@@ -219,7 +219,7 @@ drawGame gs
 
     -- Renderiza la interfaz de usuario
     drawUI :: GameState -> Picture
-    drawUI gs = Pictures [timeDisplay, robotCount]
+    drawUI gs = Pictures [timeDisplay, robotCount, hotkeys]
       where
 
         -- Posiciones responsive basadas en el tamaño de ventana
@@ -233,7 +233,9 @@ drawGame gs
                       Text ("Tiempo: " ++ show (round (gameTime gs) :: Int) ++ "s")
         
         robotCount = Color white $ Translate leftMargin (topMargin - 60) $ Scale textScale textScale $ 
-                     Text ("Robots vivos: " ++ show (length (gfilter isRobotAlive (gameRobots gs))))
+                     Text ("Robots vivos: " ++ show (length (gameRobots gs)))
+        hotkeys = Color white $ Translate leftMargin (topMargin - 90) $ Scale textScale textScale $
+                      Text "Reset: R | Debug: D | Velocidad: 1..0"
     
     drawAllVertices :: Picture
     drawAllVertices = Pictures vertsDrawings
@@ -317,7 +319,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
     -- Parámetros para nueva explosiones
     maxTime = 1
     maxRadius = 5
-    explDamage = 10
+    explDamage = 30
 
     -- Gestiona daño por explosión (solo las antiguas)
     applyExplosions :: [Explosion] -> GameState -> GameState
@@ -331,7 +333,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                 where
                     -- Comprueba si la explosión alcanza a la entidad.
                     checkExplosionGameEntity :: GameEntity a => a -> Bool
-                    checkExplosionGameEntity ent = distanceBetween (explosionPosition explosion) (position ent) < explosionRadius explosion
+                    checkExplosionGameEntity = (checkCollision (explosionVertices explosion)).vertices
                     
                     applyExplosionToRobots :: [Robot] -> GameState -> GameState
                     applyExplosionToRobots [] gs' = gs'
