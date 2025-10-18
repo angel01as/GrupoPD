@@ -36,7 +36,7 @@ data Robot = Rob
     robotTurret     :: Turret,
     robotMemory :: Map.Map String MemoryValue,
     robotBehavior :: String, -- Nombre del comportamiento, no la función
-    robotLastUpdateTime :: Scalar,
+    robotLastUpdateTime :: Scalar, -- Ultimo momento de actualizacion
     robotCurrentInstruction :: Maybe String -- Nombre de la instrucción actual
   } deriving (Show, Eq)
 

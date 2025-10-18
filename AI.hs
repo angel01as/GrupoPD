@@ -2,7 +2,7 @@
 
 module AI (
   -- Tipos del DSL
-  BotBehavior, 
+  BotBehavior,
   BotCondition(..),
   BotCommand(..),
   BotInstruction(..),
@@ -134,25 +134,25 @@ memoryEquals = MemoryEquals
 evalCondition :: BotCondition -> GameState -> Robot -> Bool
 
 -- CONDICIÓN: ¿Tiene el robot un objetivo en rango de su radar?
-evalCondition HasTarget gs robot = 
+evalCondition HasTarget gs robot =
   any (\r -> r /= robot && detectedAgent robot r) (gameRobots gs)
 
 -- CONDICIÓN: ¿La energía del robot está por debajo del umbral?
-evalCondition (IsLowEnergy threshold) _ robot = 
+evalCondition (IsLowEnergy threshold) _ robot =
   robotEnergy robot < threshold -- True si la energía del robot es menor al umbral.
 
 -- CONDICIÓN: ¿Está el robot siendo atacado?
-evalCondition IsUnderAttack gs robot = 
+evalCondition IsUnderAttack gs robot =
   any (\p -> distanceBetween (position robot) (position p) < 5) (gameProjectiles gs)
 
 -- CONDICIÓN: ¿Está el enemigo más cercano a una distancia menor que maxDist?
-evalCondition (DistanceToTarget maxDist) gs robot = 
+evalCondition (DistanceToTarget maxDist) gs robot =
   case findNearestEnemy robot (gameRobots gs) of
     Nothing -> False
     Just enemy -> distanceBetween (position robot) (position enemy) < maxDist
 
 -- CONDICIÓN: ¿Está el enemigo más cercano dentro del ángulo especificado?
-evalCondition (AngleToTarget maxAngle) gs robot = 
+evalCondition (AngleToTarget maxAngle) gs robot =
   case findNearestEnemy robot (gameRobots gs) of
     Nothing -> False
     Just enemy -> abs (angleToTarget (position robot) (position enemy) - orientation robot) < maxAngle
@@ -165,18 +165,18 @@ evalCondition (MemoryEquals key value) _ robot = -- _ es el estado del juego y e
 
 -- OPERADORES LÓGICOS
 evalCondition (Not cond) gs robot = not (evalCondition cond gs robot)
-evalCondition (And cond1 cond2) gs robot = 
+evalCondition (And cond1 cond2) gs robot =
   evalCondition cond1 gs robot && evalCondition cond2 gs robot
-evalCondition (Or cond1 cond2) gs robot = 
+evalCondition (Or cond1 cond2) gs robot =
   evalCondition cond1 gs robot || evalCondition cond2 gs robot
 
 -- Encuentra el enemigo más cercano
 findNearestEnemy :: Robot -> Map.Map ID Robot -> Maybe Robot
-findNearestEnemy robot enemies = 
+findNearestEnemy robot enemies =
   let aliveEnemies = filter (\r -> r /= robot && isRobotAlive r) (Map.elems enemies)
-  in if null aliveEnemies 
+  in if null aliveEnemies
      then Nothing
-     else Just (minimumBy (\a b -> compare (distanceBetween (position robot) (position a)) 
+     else Just (minimumBy (\a b -> compare (distanceBetween (position robot) (position a))
                                            (distanceBetween (position robot) (position b))) aliveEnemies)
 
 -- ============================================================================
@@ -185,13 +185,13 @@ findNearestEnemy robot enemies =
 
 -- Decide qué instrucciones debe ejecutar un bot basado en su comportamiento y el estado del juego
 decideBotBehavior :: BotBehavior -> GameState -> Robot -> [BotCommand]
-decideBotBehavior botBehavior gs robot = 
+decideBotBehavior botBehavior gs robot =
   let instruction = botBehavior gs robot -- Compor
   in decideInstruction instruction gs robot
 
 -- Decide qué comandos ejecutar basado en una instrucción
 decideInstruction :: BotInstruction -> GameState -> Robot -> [BotCommand]
-decideInstruction (Simple cmd) _ _ = [cmd] 
+decideInstruction (Simple cmd) _ _ = [cmd]
 decideInstruction (Conditional cond thenInstruction elseInstruction) gs robot =
   if evalCondition cond gs robot -- si se cumple
   then decideInstruction thenInstruction gs robot
@@ -205,7 +205,7 @@ decideInstruction (Sequence instructions) gs robot =  -- Se vuelve a llamar porq
 
 -- Bot agresivo que busca enemigos y los ataca
 aggressiveBot :: BotBehavior
-aggressiveBot gs robot = 
+aggressiveBot gs robot =
   ifThenElse hasTarget
     (sequence [
       -- Si tiene objetivo, apuntar y disparar
@@ -224,7 +224,7 @@ aggressiveBot gs robot =
 
 -- Bot defensivo que evita enemigos cuando tiene poca energía
 defensiveBot :: BotBehavior
-defensiveBot gs robot = 
+defensiveBot gs robot =
   ifThenElse (isLowEnergy 30)
     (sequence [
       -- Si tiene poca energía, huir
@@ -269,45 +269,61 @@ data AIExecutionResult = AIExecutionResult
 
 -- Ejecuta una lista de comandos AI sobre un robot
 executeAICommands :: [BotCommand] -> Robot -> Scalar -> AIExecutionResult
-executeAICommands commands robot deltaTime = 
-  let (updatedRobot', spawnedProjectiles', spawnedExplosions') = 
-        foldl (executeCommand deltaTime) (robot, [], []) commands
+-- executeAICommands commands robot deltaTime =
+--   let (updatedRobot', spawnedProjectiles', spawnedExplosions') = foldl (executeCommand deltaTime) (robot, [], []) commands
+--   in AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
+executeAICommands commands robot deltaTime = let
+  (updatedRobot', spawnedProjectiles', spawnedExplosions') = processCommands commands (robot, [], [])
+
+  processCommands :: [BotCommand] -> (Robot, [Projectile], [Explosion]) -> (Robot, [Projectile], [Explosion])
+  processCommands [] (robot, projectiles, explosions) = (robot, projectiles, explosions)
+  processCommands (cmd:cmds) (robot, projectiles, explosions) = let waitingTime = Map.findWithDefault (ScalarValue 0) "waitingTime" (robotMemory robot)
+    in if memGT waitingTime (ScalarValue deltaTime)
+    then processCommands (cmd:cmds) (robot { robotMemory = Map.adjust (\(ScalarValue x) -> memMax (ScalarValue (x - deltaTime)) (ScalarValue 0)) "waitingTime" (robotMemory robot)}, projectiles, explosions)
+    else processCommands cmds (executeCommand deltaTime (robot, projectiles, explosions) cmd)
+
+  memGT :: MemoryValue -> MemoryValue -> Bool
+  memGT (ScalarValue a) (ScalarValue b) = a > b
+
+  memMax :: MemoryValue -> MemoryValue -> MemoryValue
+  memMax (ScalarValue a) (ScalarValue b) = ScalarValue (max a b)
+
   in AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
 
 -- Ejecuta un comando individual
 executeCommand :: Scalar -> (Robot, [Projectile], [Explosion]) -> BotCommand -> (Robot, [Projectile], [Explosion])
-executeCommand deltaTime (robot, projectiles, explosions) (MovementCommand action) = 
+executeCommand deltaTime (robot, projectiles, explosions) (MovementCommand action) =
   (updateRobotVelocity robot (multiplyMovementAction deltaTime action), projectiles, explosions)
 
-executeCommand _ (robot, projectiles, explosions) ShootCommand = 
+executeCommand _ (robot, projectiles, explosions) ShootCommand =
   case shootProjectile robot of
     Just projectile -> (afterShooting robot, projectile : projectiles, explosions)
     Nothing -> (robot, projectiles, explosions)
 
-executeCommand deltaTime (robot, projectiles, explosions) (WaitCommand time) = 
-  (robot, projectiles, explosions) -- El wait se maneja a nivel de instrucción
+executeCommand _ (robot, projectiles, explosions) (WaitCommand time) =
+  (robot { robotMemory = Map.insert "waitingTime" (ScalarValue time) (robotMemory robot)}, projectiles, explosions) -- El wait se maneja a nivel de instrucción
 
-executeCommand _ (robot, projectiles, explosions) (SetMemoryCommand key value) = 
+executeCommand _ (robot, projectiles, explosions) (SetMemoryCommand key value) =
   (robot { robotMemory = Map.insert key value (robotMemory robot) }, projectiles, explosions)
 
-executeCommand _ (robot, projectiles, explosions) (ClearMemoryCommand key) = 
+executeCommand _ (robot, projectiles, explosions) (ClearMemoryCommand key) =
   (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
 
 -- Actualiza un robot con su comportamiento AI
 updateRobotAI :: Robot -> GameState -> Scalar -> AIExecutionResult
-updateRobotAI robot gs deltaTime = 
+updateRobotAI robot gs deltaTime =
   let -- Actualizar cooldown de la torreta
       robotWithUpdatedCooldown = updateTurretCooldown robot deltaTime
-      
+
       -- Obtener comportamiento por nombre
       behavior = getBehaviorByName (robotBehavior robot)
-      
+
       -- Decidir comportamiento
       commands = decideBotBehavior behavior gs robotWithUpdatedCooldown
-      
+
       -- Ejecutar comandos
       result = executeAICommands commands robotWithUpdatedCooldown deltaTime
-      
+
       -- Actualizar tiempo de última actualización
       finalRobot = (updatedRobot result) { robotLastUpdateTime = gameTime gs }
   in result { updatedRobot = finalRobot }
