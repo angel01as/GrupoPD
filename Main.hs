@@ -28,6 +28,8 @@ main = do
                                 gameBackground = backgroundImage,
                                 gameKeysPressed = Set.empty,
                                 gameTotalProjectileCount = 0,
-                                gameTotalExplosionCount = 0
+                                gameTotalExplosionCount = 0,
+                                gameSimulationSpeed = 1,
+                                gameDebugInfo = True
                             }
     playGame initialState

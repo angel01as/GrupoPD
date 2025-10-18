@@ -131,7 +131,7 @@ shootProjectile r
     { 
       projectilePosition = position r,
       projectileVelocity = prodByScalar 60 (angleFactor (turretOrientation (robotTurret r))),
-      projectileVertices = [(0,0), (0.5,0), (0.5,0.5), (0,0.5)],
+      projectileVertices = map (add2D (position r))[(0,0), (0.5,0), (0.5,0.5), (0,0.5)],
       projectileSize = (0.5, 0.5),
       projectileOrientation = turretOrientation (robotTurret r),
       projectileDamage = turretDamage (robotTurret r),

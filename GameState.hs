@@ -21,5 +21,7 @@ data GameState = GameState
     gameBackground :: Maybe Picture,
     gameKeysPressed :: Set.Set Key,
     gameTotalProjectileCount :: Int,
-    gameTotalExplosionCount :: Int
+    gameTotalExplosionCount :: Int,
+    gameSimulationSpeed :: Scalar,
+    gameDebugInfo :: Bool
   } deriving (Show, Eq)

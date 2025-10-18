@@ -2,8 +2,8 @@
 
 module Game (playGame, loadBackgroundImage) where
 
-import Graphics.Gloss hiding (Vector)
-import Graphics.Gloss.Interface.Pure.Game hiding (Vector)
+import Graphics.Gloss hiding (Vector, Point)
+import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
 import Graphics.Gloss.Juicy
 
 import Geometry
@@ -93,15 +93,28 @@ meter2Pixel gs m = m * getMeter2PixelFactor gs
 
 
 playGame :: GameState -> IO()
-playGame initialState = play window backgroundColor fps initialState drawGame (handleEvents [tryHandleResizing, tryHandleKeys]) updateWithReset
+playGame initialState = play window backgroundColor fps initialState drawGame (handleEvents [tryHandleResizing, tryHandleKeys]) preUpdateGame
     where
         fps = 60
         backgroundColor = white
         window = InWindow "Juego de tanques " (gameWindowSize initialState) (100, 100)
-        updateWithReset :: Float -> GameState -> GameState
-        updateWithReset dt gs
-          | (Set.member (Char 'r') (gameKeysPressed gs)) = initialState -- Reiniciamos el juego al pulsar 'r'
-          | otherwise = updateGame dt gs
+        preUpdateGame :: Float -> GameState -> GameState
+        preUpdateGame dt gs
+          | Set.member (Char 'r') (gameKeysPressed gs) = initialState { gameSimulationSpeed = gameSimulationSpeed gs, gameDebugInfo = (gameDebugInfo gs)} -- Reiniciamos el juego al pulsar 'r'. Nótese que initialState no tiene 'r' pulsado y no se volverá a añadir hasta que se suelte y vuelva pulsar la tecla.
+          | Set.member (Char 'd') keys = updateGame dt (gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys }) -- Cambiamos el modo debug y limpiamos la tecla.
+          | Set.member (Char '1') keys = updateGame dt (gs { gameSimulationSpeed = 0.1 }) -- Cambiamos la velocidad de simulación.
+          | Set.member (Char '2') keys = updateGame dt (gs { gameSimulationSpeed = 0.25 })
+          | Set.member (Char '3') keys = updateGame dt (gs { gameSimulationSpeed = 0.5 })
+          | Set.member (Char '4') keys = updateGame dt (gs { gameSimulationSpeed = 0.75 })
+          | Set.member (Char '5') keys = updateGame dt (gs { gameSimulationSpeed = 1.0 })
+          | Set.member (Char '6') keys = updateGame dt (gs { gameSimulationSpeed = 1.25 })
+          | Set.member (Char '7') keys = updateGame dt (gs { gameSimulationSpeed = 1.5 })
+          | Set.member (Char '8') keys = updateGame dt (gs { gameSimulationSpeed = 2.0 })
+          | Set.member (Char '9') keys = updateGame dt (gs { gameSimulationSpeed = 2.5 })
+          | Set.member (Char '0') keys = updateGame dt (gs { gameSimulationSpeed = 3.0 })
+          | otherwise                  = updateGame dt gs
+          where
+            keys = gameKeysPressed gs
 
 -- === CARGA DE IMÁGENES ===
 -- Función para cargar imagen de fondo (retorna Nothing si falla)
@@ -110,8 +123,12 @@ loadBackgroundImage path = loadJuicy path
 
 -- === DIBUJO ===
 drawGame :: GameState -> Picture
-drawGame gs = Pictures [background, robotsPic, projectilesPic, explosionsPic, ui, createBorder]
+drawGame gs
+  | gameDebugInfo gs = Pictures [regularGameInfo, debugGameInfo]
+  | otherwise = regularGameInfo
   where
+    regularGameInfo = Pictures [background, robotsPic, projectilesPic, explosionsPic, ui]
+    debugGameInfo = Pictures [createBorder, drawAllVertices]
     windowSize = gameWindowSize gs
     (windowWidth, windowHeight) = (fromIntegral (fst windowSize), fromIntegral (snd windowSize))
     (baseWindowWidth, baseWindowHeight) = (fromIntegral $ fst baseWindowSize, fromIntegral $ snd baseWindowSize)
@@ -217,11 +234,23 @@ drawGame gs = Pictures [background, robotsPic, projectilesPic, explosionsPic, ui
         
         robotCount = Color white $ Translate leftMargin (topMargin - 60) $ Scale textScale textScale $ 
                      Text ("Robots vivos: " ++ show (length (gfilter isRobotAlive (gameRobots gs))))
+    
+    drawAllVertices :: Picture
+    drawAllVertices = Pictures vertsDrawings
+      where
+        allVertices = concatMap vertices (gameRobots gs) ++ concatMap vertices (gameProjectiles gs)
+        vertsDrawings = drawVertices allVertices
+          where
+            drawVertices :: [Point] -> [Picture]
+            drawVertices [] = []
+            drawVertices (v:vs) = vertDraw:drawVertices vs
+              where vertDraw = Color red $ uncurry Translate (toPx v) $ circleSolid (meter2Pixel gs 0.5)
 
 -- === ACTUALIZACIÓN ===
 updateGame :: Float -> GameState -> GameState
-updateGame deltaTime oldState = finalState { gameTime = gameTime oldState + deltaTime }
+updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + deltaTime }
   where
+    deltaTime = trueDeltaTime * gameSimulationSpeed oldState
     -- Ejecutar física
     -- Comprobar las posibles colisiones (entre proyectiles, tanques, etc.).
     -- Llamar a las funciones de lógica de cada bot para determinar sus acciones.
