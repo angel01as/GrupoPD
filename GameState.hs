@@ -19,5 +19,7 @@ data GameState = GameState
     gameWindowSize :: (Int, Int),
     gameStageSize :: Size, -- Tamaño interno del escenario.
     gameBackground :: Maybe Picture,
-    gameKeysPressed :: Set.Set Key
+    gameKeysPressed :: Set.Set Key,
+    gameTotalProjectileCount :: Int,
+    gameTotalExplosionCount :: Int
   } deriving (Show, Eq)

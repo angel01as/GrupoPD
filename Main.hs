@@ -26,6 +26,8 @@ main = do
                                 gameExplosions = Map.fromList [],
                                 gameStageSize = (100, 70),
                                 gameBackground = backgroundImage,
-                                gameKeysPressed = Set.empty
+                                gameKeysPressed = Set.empty,
+                                gameTotalProjectileCount = 0,
+                                gameTotalExplosionCount = 0
                             }
     playGame initialState

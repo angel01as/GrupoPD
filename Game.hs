@@ -318,12 +318,14 @@ updateGame deltaTime oldState = finalState { gameTime = gameTime oldState + delt
                         | checkExplosionGameEntity p && isExplosionDamaging explosion = applyExplosionToProjectiles ps updatedGS
                         | otherwise = applyExplosionToProjectiles ps gs'
                         where
+                            totalExplosionCount = gameTotalExplosionCount gs'
                             -- Si colisiona con un proyectil, se destruye y se genera una nueva explosión.
                             updatedGS = gs' { 
                                                 gameProjectiles = Map.delete (projectileID p) (gameProjectiles gs'),
-                                                gameExplosions = Map.insert newID newExpl (gameExplosions gs')
+                                                gameExplosions = Map.insert newID newExpl (gameExplosions gs'),
+                                                gameTotalExplosionCount = totalExplosionCount + 1
                                             }
-                            newID = Map.size (gameExplosions gs')
+                            newID = totalExplosionCount
                             newExpl = createExplosion (position p) maxRadius explDamage maxTime newID
 
     -- Gestiona colisiones entre Proyectil y Robot, generando una nueva explosión.
@@ -338,16 +340,18 @@ updateGame deltaTime oldState = finalState { gameTime = gameTime oldState + delt
                 else gs { 
                             gameRobots = updatedRobots,
                             gameProjectiles = Map.delete (projectileID p) (gameProjectiles gs),
-                            gameExplosions = Map.insert newID newExpl (gameExplosions gs)
+                            gameExplosions = Map.insert newID newExpl (gameExplosions gs),
+                            gameTotalExplosionCount = totalExplosionCount + 1
                         }
                 where
+                    totalExplosionCount = gameTotalExplosionCount gs
                     robots = gameRobots gs
                     updatedRobots
                         | isRobotAlive updatedR = Map.insert (robotID r) updatedR robots
                         | otherwise = Map.delete (robotID r) robots
                         where
                             updatedR = r { robotEnergy = (robotEnergy r - projectileDamage p) }
-                    newID = Map.size (gameExplosions gs)
+                    newID = totalExplosionCount
                     newExpl = createExplosion (position p) maxRadius explDamage maxTime newID
 
     -- Gestiona colisiones entre Robot y Robot, dañando a ambos por igual.
@@ -376,21 +380,23 @@ updateGame deltaTime oldState = finalState { gameTime = gameTime oldState + delt
 
     -- IA --
 
-    -- Adaptado de Ángel. Pendiente de mejora.
     -- Actualizamos cada robot con su IA y recogemos nuevos proyectiles
     aiResults = fmap (\r -> AI.updateRobotAI r collisionState deltaTime) (gameRobots collisionState)
     updatedRobots = fmap AI.updatedRobot aiResults
     spawnedProjectiles = concatMap AI.newProjectiles aiResults
     
-    insertSpawnedProjectiles :: Map.Map ID Projectile -> [Projectile] -> Map.Map ID Projectile
-    insertSpawnedProjectiles m [] = m
-    insertSpawnedProjectiles m (x:xs) = insertSpawnedProjectiles newM xs
+    insertSpawnedProjectiles :: ID -> Map.Map ID Projectile -> [Projectile] -> Map.Map ID Projectile
+    insertSpawnedProjectiles nextID m [] = m
+    insertSpawnedProjectiles nextID m (p:ps) = insertSpawnedProjectiles (nextID + 1) newM ps
         where
-            newID = Map.size m
-            newM = Map.insert newID (x { projectileID = newID }) m
+            newM = Map.insert nextID (p { projectileID = nextID }) m
     -- Metemos cada proyectil con ID = tamaño de m 
-
-    allProjectiles = insertSpawnedProjectiles (gameProjectiles collisionState) spawnedProjectiles
+    totalProjectileCount = gameTotalProjectileCount collisionState
+    allProjectiles = insertSpawnedProjectiles totalProjectileCount (gameProjectiles collisionState) spawnedProjectiles
     -- FIN DE IA --
 
-    finalState = collisionState { gameRobots = updatedRobots, gameProjectiles = allProjectiles}
+    finalState = collisionState 
+      { 
+        gameRobots = updatedRobots, gameProjectiles = allProjectiles, 
+        gameTotalProjectileCount = totalProjectileCount + length spawnedProjectiles
+      }
