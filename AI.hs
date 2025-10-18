@@ -250,7 +250,7 @@ defensiveBot gs robot =
     )
 
 stupidBot :: BotBehavior
-stupidBot gs robot = move 1
+stupidBot gs robot = sequence [wait 1, move 1]
 
 -- Bot de ejemplo simple
 exampleBot :: BotBehavior
@@ -267,19 +267,21 @@ data AIExecutionResult = AIExecutionResult
   , newExplosions :: [Explosion]
   } deriving (Show, Eq)
 
--- Ejecuta una lista de comandos AI sobre un robot
+-- Ejecuta una lista de comandos AI sobre un robot, respetando el tiempo de espera.
 executeAICommands :: [BotCommand] -> Robot -> Scalar -> AIExecutionResult
 -- executeAICommands commands robot deltaTime =
 --   let (updatedRobot', spawnedProjectiles', spawnedExplosions') = foldl (executeCommand deltaTime) (robot, [], []) commands
 --   in AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
-executeAICommands commands robot deltaTime = let
-  (updatedRobot', spawnedProjectiles', spawnedExplosions') = processCommands commands (robot, [], [])
+executeAICommands commands robot' deltaTime = let
+  (updatedRobot', spawnedProjectiles', spawnedExplosions') = processCommands commands (robot', [], [])
 
   processCommands :: [BotCommand] -> (Robot, [Projectile], [Explosion]) -> (Robot, [Projectile], [Explosion])
   processCommands [] (robot, projectiles, explosions) = (robot, projectiles, explosions)
   processCommands (cmd:cmds) (robot, projectiles, explosions) = let waitingTime = Map.findWithDefault (ScalarValue 0) "waitingTime" (robotMemory robot)
     in if memGT waitingTime (ScalarValue deltaTime)
-    then processCommands (cmd:cmds) (robot { robotMemory = Map.adjust (\(ScalarValue x) -> memMax (ScalarValue (x - deltaTime)) (ScalarValue 0)) "waitingTime" (robotMemory robot)}, projectiles, explosions)
+      -- Si el tiempo de espera restante es mayor que el transcurrido desde el último frame no ejecutamos nada y actualizamos el tiempo de espera restante.
+      -- Map.adjust usa el valor asociado a la clave en una función que devuelve el nuevo valor.
+    then (robot { robotMemory = Map.adjust (\(ScalarValue x) -> memMax (ScalarValue (x - deltaTime)) (ScalarValue 0)) "waitingTime" (robotMemory robot)}, projectiles, explosions)
     else processCommands cmds (executeCommand deltaTime (robot, projectiles, explosions) cmd)
 
   memGT :: MemoryValue -> MemoryValue -> Bool
@@ -300,8 +302,9 @@ executeCommand _ (robot, projectiles, explosions) ShootCommand =
     Just projectile -> (afterShooting robot, projectile : projectiles, explosions)
     Nothing -> (robot, projectiles, explosions)
 
-executeCommand _ (robot, projectiles, explosions) (WaitCommand time) =
-  (robot { robotMemory = Map.insert "waitingTime" (ScalarValue time) (robotMemory robot)}, projectiles, explosions) -- El wait se maneja a nivel de instrucción
+executeCommand _ (robot, projectiles, explosions) (WaitCommand time)
+  | Map.member "waitingTime" (robotMemory robot) = (robot, projectiles, explosions) -- Si ya tiene waitingTime, según el control actual no debemos volver a establecerlo porque se crearía un bloqueo infinito.
+  | otherwise = (robot { robotMemory = Map.insert "waitingTime" (ScalarValue time) (robotMemory robot)}, projectiles, explosions) -- Si no, establecemos waitingTime
 
 executeCommand _ (robot, projectiles, explosions) (SetMemoryCommand key value) =
   (robot { robotMemory = Map.insert key value (robotMemory robot) }, projectiles, explosions)
@@ -324,8 +327,20 @@ updateRobotAI robot gs deltaTime =
       -- Ejecutar comandos
       result = executeAICommands commands robotWithUpdatedCooldown deltaTime
 
-      -- Actualizar tiempo de última actualización
-      finalRobot = (updatedRobot result) { robotLastUpdateTime = gameTime gs }
+      -- Actualizar tiempo de última actualización y eliminar waitingTime si procede.
+      preFinalRobot = (updatedRobot result) { robotLastUpdateTime = gameTime gs }
+
+      finalRobot
+        | Map.member "waitingTime" (robotMemory preFinalRobot) = waitFinalRobot
+        | otherwise = preFinalRobot
+        where
+          waitFinalRobot
+            | memLEQ currentWaitingTime (ScalarValue 0) = preFinalRobot { robotMemory = Map.delete "waitingTime" (robotMemory preFinalRobot)}
+            | otherwise = preFinalRobot
+            where 
+              memLEQ :: MemoryValue -> MemoryValue -> Bool
+              memLEQ (ScalarValue x) (ScalarValue y) = x <= y
+              currentWaitingTime = (robotMemory preFinalRobot) Map.! "waitingTime"
   in result { updatedRobot = finalRobot }
 
 -- Obtiene un comportamiento por su nombre
