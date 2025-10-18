@@ -12,3 +12,5 @@ Mejorar también la renderización para marcar claramente la diferencia entre el
 * Estudiar el motivo por el que el robot agresivo sigue disparando después de destruir al estúpido.
 
 * Terminar de implementar la correcta y controlada ejecución de la IA y hacer comportamientos funcionales.
+
+* Estudiar la implementación de MemoryValue en un módulo propio que incluya todas las funciones del tipo memGT, memMax, etc que nos hagan falta en AI, teniendo cubiertas todas las posibles entradas de MemoryValue.
