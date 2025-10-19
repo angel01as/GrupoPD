@@ -54,6 +54,7 @@ data BotCondition
   | Not BotCondition             -- Negación lógica
   | And BotCondition BotCondition    -- Y lógico
   | Or BotCondition BotCondition     -- O lógico
+  | BoolCondition Bool               -- Valor booleano arbitrario
   deriving (Show, Eq)
 
 -- Instrucciones que puede ejecutar un bot
@@ -181,6 +182,8 @@ evalCondition (And cond1 cond2) gs robot =
 evalCondition (Or cond1 cond2) gs robot =
   evalCondition cond1 gs robot || evalCondition cond2 gs robot
 
+evalCondition (BoolCondition b) _ _ = b
+
 -- Encuentra el enemigo más cercano
 findNearestEnemy :: Robot -> Map.Map ID Robot -> Maybe Robot
 findNearestEnemy robot enemies =
@@ -279,7 +282,7 @@ turretBot gs robot = sequence [
         ]
 
 stupidBot :: BotBehavior
-stupidBot gs robot = sequence [wait 1, move 1, rotate (pi/16)]
+stupidBot gs robot = sequence [wait 0.1, move 10, rotate (16*(pi/16)), wait 1, rotateTurret 10]
 
 -- Bot de ejemplo simple
 exampleBot :: BotBehavior
@@ -296,52 +299,107 @@ data AIExecutionResult = AIExecutionResult
   , newExplosions :: [Explosion]
   } deriving (Show, Eq)
 
+-- Crea un punto de bloqueo en una secuencia de BotCommand. NO es un control de flujo completo.
+-- Usar esta función en todas las acciones bloqueantes: Wait, MovementCommand, RotateTurret
+-- Hay que actualizar el valor de acumulator en cada frame. Se debe cumplir acumulator >= acumulatorEnd, terminando el bloqueo cuando acumulator <= acumulatorEnd.
+-- Estas actualizaciones en principio deben hacerse en executeCommand.
+createBlockPoint :: Robot -> Int -> Int -> Scalar -> Scalar -> Robot
+createBlockPoint robot blockPoint sequenceLength acumulator acumulatorEnd = robot { robotMemory = updatedMemory}
+  where
+    updatedMemory = Map.insert "blockPoint" (IntValue blockPoint) $
+                    Map.insert "sequenceLength" (IntValue sequenceLength) $
+                    Map.insert "blockPointAcumulator" (ScalarValue acumulator) $
+                    Map.insert "blockPointAcumulatorEnd" (ScalarValue acumulatorEnd) (robotMemory robot)
+
+-- Limpia el punto de bloqueo
+clearBlockPoint :: Robot -> Robot
+clearBlockPoint robot = robot { robotMemory = updatedMemory}
+  where
+    updatedMemory = Map.delete "blockPoint" $
+                    Map.delete "sequenceLength" $
+                    Map.delete "blockPointAcumulator" $
+                    Map.delete "blockPointAcumulatorEnd" (robotMemory robot)
+
 -- Ejecuta una lista de comandos AI sobre un robot, respetando el tiempo de espera.
 executeAICommands :: [BotCommand] -> Robot -> Scalar -> AIExecutionResult
 -- executeAICommands commands robot deltaTime =
 --   let (updatedRobot', spawnedProjectiles', spawnedExplosions') = foldl (executeCommand deltaTime) (robot, [], []) commands
 --   in AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
-executeAICommands commands robot' deltaTime = let
-  (updatedRobot', spawnedProjectiles', spawnedExplosions') = processCommands commands (robot', [], [])
+executeAICommands commands robot' deltaTime = AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
+  where
+  (preProcessedCommands, preProcessedRobot) = preProcessCommands commands robot'
+  (updatedRobot', spawnedProjectiles', spawnedExplosions') = processCommands preProcessedCommands (preProcessedRobot, [], [])
+
+  preProcessCommands :: [BotCommand] -> Robot -> ([BotCommand], Robot)
+  preProcessCommands [] s = ([], s)
+  preProcessCommands cmds robot
+      -- Si el tiempo de espera restante es mayor que el transcurrido desde el último frame no ejecutamos nada y actualizamos el tiempo de espera restante.
+      -- Map.adjust usa el valor asociado a la clave en una función que devuelve el nuevo valor.
+    -- | memGT waitingTime (ScalarValue deltaTime) = ([], robot { robotMemory = Map.adjust (\(ScalarValue x) -> memMax (ScalarValue (x - deltaTime)) (ScalarValue 0)) "waitingTime" (robotMemory robot)})
+    | Map.member "blockPoint" (robotMemory robot) = (nextCmds, updatedRobot)
+    | otherwise = (cmds, robot)
+    where
+      (nextCmds, updatedRobot)
+        -- Si el valor de sequenceLength no coincide con length cmds ha habido un cambio de rama y hay que limpiar.
+        | sequenceLength /= length cmds = (cmds, cleanRobot)
+        -- Si acumulator < acumulatorEnd + margen de error, ha terminado el bloqueo y debemos continuar la ejecución.
+        | acumulator < acumulatorEnd + 1e-5 = (jumpCmds, cleanRobot)
+        -- En este caso solo debe seguir la ejecución de la acción bloqueante y quizá de las siguientes.
+        | otherwise = (jumpCmds, updatedJumpRobot)
+        where 
+          -- El valor de la clave blockPoint será un un IntValue (índice del salto a realizar según el último bloqueo)
+          memory = robotMemory robot
+          blockPoint = (\(IntValue x) -> x) $ memory Map.! "blockPoint"
+          sequenceLength = (\(IntValue a) -> a) $ memory Map.! "sequenceLength"
+          acumulator = (\(ScalarValue x) -> x) $ memory Map.! "blockPointAcumulator"
+          acumulatorEnd = (\(ScalarValue x) -> x) $ memory Map.! "blockPointAcumulatorEnd"
+          blockingCmd = cmds !! blockPoint -- Comando de bloqueo
+          jumpCmds = drop (blockPoint + 1) cmds -- Comandos después del bloqueo
+          cleanRobot = clearBlockPoint robot
+          (updatedJumpRobot, _, _) = executeCommand deltaTime (robot, [], []) (blockPoint, length commands) blockingCmd
 
   processCommands :: [BotCommand] -> (Robot, [Projectile], [Explosion]) -> (Robot, [Projectile], [Explosion])
   processCommands [] (robot, projectiles, explosions) = (robot, projectiles, explosions)
-  processCommands (cmd:cmds) (robot, projectiles, explosions) = let waitingTime = Map.findWithDefault (ScalarValue 0) "waitingTime" (robotMemory robot)
-    in if memGT waitingTime (ScalarValue deltaTime)
-      -- Si el tiempo de espera restante es mayor que el transcurrido desde el último frame no ejecutamos nada y actualizamos el tiempo de espera restante.
-      -- Map.adjust usa el valor asociado a la clave en una función que devuelve el nuevo valor.
-    then (robot { robotMemory = Map.adjust (\(ScalarValue x) -> memMax (ScalarValue (x - deltaTime)) (ScalarValue 0)) "waitingTime" (robotMemory robot)}, projectiles, explosions)
-    else processCommands cmds (executeCommand deltaTime (robot, projectiles, explosions) cmd)
+  processCommands (cmd:cmds) (robot, projectiles, explosions)
+    | Map.member "blockPoint" (robotMemory robot) = (robot, projectiles, explosions)
+    | otherwise = processCommands cmds (executeCommand deltaTime (robot, projectiles, explosions) (currentIndex, totalCommands) cmd)
+    where
+      totalCommands = length commands
+      currentIndex = totalCommands - length cmds - 1
 
-  memGT :: MemoryValue -> MemoryValue -> Bool
-  memGT (ScalarValue a) (ScalarValue b) = a > b
-
-  memMax :: MemoryValue -> MemoryValue -> MemoryValue
-  memMax (ScalarValue a) (ScalarValue b) = ScalarValue (max a b)
-
-  in AIExecutionResult updatedRobot' spawnedProjectiles' spawnedExplosions'
 
 -- Ejecuta un comando individual
-executeCommand :: Scalar -> (Robot, [Projectile], [Explosion]) -> BotCommand -> (Robot, [Projectile], [Explosion])
-executeCommand deltaTime (robot, projectiles, explosions) (MovementCommand action) =
+type BotCommandIndex = Int
+type BotCommandContext = (BotCommandIndex, Int) -- Índice y número total de comandos en la secuencia
+
+executeCommand :: Scalar -> (Robot, [Projectile], [Explosion]) -> BotCommandContext -> BotCommand -> (Robot, [Projectile], [Explosion])
+-- TODO: Hacer blocking
+executeCommand deltaTime (robot, projectiles, explosions) _ (MovementCommand action) =
   (updateRobotVelocity robot (multiplyMovementAction deltaTime action), projectiles, explosions)
 
-executeCommand _ (robot, projectiles, explosions) ShootCommand =
+executeCommand _ (robot, projectiles, explosions) _ ShootCommand =
   case shootProjectile robot of
     Just projectile -> (afterShooting robot, projectile : projectiles, explosions)
     Nothing -> (robot, projectiles, explosions)
 
-executeCommand _ (robot, projectiles, explosions) (WaitCommand time)
-  | Map.member "waitingTime" (robotMemory robot) = (robot, projectiles, explosions) -- Si ya tiene waitingTime, según el control actual no debemos volver a establecerlo porque se crearía un bloqueo infinito.
-  | otherwise = (robot { robotMemory = Map.insert "waitingTime" (ScalarValue time) (robotMemory robot)}, projectiles, explosions) -- Si no, establecemos waitingTime
+executeCommand deltaTime (robot, projectiles, explosions) (index, seq) (WaitCommand time)
+  | Map.member "blockPoint" (robotMemory robot) = (updatedRobot, projectiles, explosions) -- Ya está bloqueando, tenemos que actualizar el acumulador.
+  | otherwise = (createBlockPoint robot index seq time 0, projectiles, explosions) -- No está bloqueando, empezamos a bloquear.
+  where 
+    waitingTime = (\(ScalarValue x) -> x) $ (robotMemory robot) Map.! "blockPointAcumulator"
 
-executeCommand _ (robot, projectiles, explosions) (SetMemoryCommand key value) =
+    updatedRobot
+      | waitingTime - deltaTime > 1e-5 = robot { robotMemory = Map.insert "blockPointAcumulator" (ScalarValue (waitingTime - deltaTime)) (robotMemory robot)}
+      | otherwise = clearBlockPoint robot
+
+executeCommand _ (robot, projectiles, explosions) _ (SetMemoryCommand key value) =
   (robot { robotMemory = Map.insert key value (robotMemory robot) }, projectiles, explosions)
 
-executeCommand _ (robot, projectiles, explosions) (ClearMemoryCommand key) =
+executeCommand _ (robot, projectiles, explosions) _ (ClearMemoryCommand key) =
   (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
 
-executeCommand deltaTime (robot, projectiles, explosions) (RotateTurretCommand angle) =
+-- TODO: Hacer blocking
+executeCommand deltaTime (robot, projectiles, explosions) index (RotateTurretCommand angle) =
   (robot { robotTurret = turret { turretOrientation = turretOrientation turret + angle * deltaTime } }, projectiles, explosions)
   where turret = robotTurret robot
 
@@ -349,6 +407,12 @@ executeCommand deltaTime (robot, projectiles, explosions) (RotateTurretCommand a
 updateRobotAI :: Robot -> GameState -> Scalar -> AIExecutionResult
 updateRobotAI robot gs deltaTime =
   let -- Actualizar cooldown de la torreta
+      -- Usamos trace para debug: Muestra el primer argumento y devuelve el segundo. Por ejecución perezosa hay que utilizar el valor res.
+      condTrace :: String -> a -> a
+      condTrace msg res
+        | mod (gameFrame gs) 60 == 0 = trace msg res
+        | otherwise = res
+
       robotWithUpdatedCooldown = updateTurretCooldown robot deltaTime
 
       -- Obtener comportamiento por nombre
@@ -356,28 +420,24 @@ updateRobotAI robot gs deltaTime =
 
       -- Decidir comportamiento
       commands = decideBotBehavior behavior gs robotWithUpdatedCooldown
-
-      -- Usamos trace para debug: Muestra el primer argumento y devuelve el segundo. Por ejecución perezosa hay que utilizar "debug".
-      debug
-        | floor (gameTime gs + deltaTime) > floor (gameTime gs) = trace (show (robotID robot) ++ ": " ++ show commands) commands
-        | otherwise = commands
+       
       -- Ejecutar comandos
-      result = executeAICommands debug robotWithUpdatedCooldown deltaTime
+      result = executeAICommands (condTrace (show (robotID robot) ++ ": " ++ show commands ++ "\n" ++ show (robotMemory robot)) commands) robotWithUpdatedCooldown deltaTime
 
       -- Actualizar tiempo de última actualización y eliminar waitingTime si procede.
-      preFinalRobot = (updatedRobot result) { robotLastUpdateTime = gameTime gs }
+      finalRobot = (updatedRobot result) { robotLastUpdateTime = gameTime gs }
 
-      finalRobot
-        | Map.member "waitingTime" (robotMemory preFinalRobot) = waitFinalRobot
-        | otherwise = preFinalRobot
-        where
-          waitFinalRobot
-            | memLEQ currentWaitingTime (ScalarValue 0) = preFinalRobot { robotMemory = Map.delete "waitingTime" (robotMemory preFinalRobot)}
-            | otherwise = preFinalRobot
-            where
-              memLEQ :: MemoryValue -> MemoryValue -> Bool
-              memLEQ (ScalarValue x) (ScalarValue y) = x <= y
-              currentWaitingTime = (robotMemory preFinalRobot) Map.! "waitingTime"
+      --finalRobot
+      --  | Map.member "waitingTime" (robotMemory preFinalRobot) = condTrace (show (robotID waitFinalRobot) ++ ": " ++ show (robotMemory waitFinalRobot)) waitFinalRobot
+      --  | otherwise = preFinalRobot
+      --  where
+      --    waitFinalRobot
+      --      | memLEQ currentWaitingTime (ScalarValue 0) = preFinalRobot { robotMemory = Map.delete "waitingTime" (robotMemory preFinalRobot)}
+      --      | otherwise = preFinalRobot
+      --      where
+      --        memLEQ :: MemoryValue -> MemoryValue -> Bool
+      --        memLEQ (ScalarValue x) (ScalarValue y) = x <= y
+      --        currentWaitingTime = (robotMemory preFinalRobot) Map.! "waitingTime"
   in result { updatedRobot = finalRobot }
 
 -- Obtiene un comportamiento por su nombre

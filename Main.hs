@@ -24,6 +24,7 @@ main = do
                                 gameRobots = robots,
                                 gameProjectiles = Map.fromList [],
                                 gameTime = 0,
+                                gameFrame = 0,
                                 gameExplosions = Map.fromList [],
                                 gameStageSize = (100, 70),
                                 gameBackground = backgroundImage,

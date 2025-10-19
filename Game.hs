@@ -250,7 +250,7 @@ drawGame gs
 
 -- === ACTUALIZACIÓN ===
 updateGame :: Float -> GameState -> GameState
-updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + deltaTime }
+updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + deltaTime, gameFrame = gameFrame oldState + 1 }
   where
     deltaTime = trueDeltaTime * gameSimulationSpeed oldState
     -- Ejecutar física
