@@ -13,8 +13,9 @@ main = do
     let window = (1000, 700)
     let robots = Map.fromList
             [ 
-                (1, createBasicRobot (-10, 0) "aggressive" 1),
-                (2, createBasicRobot ( 15, 10) "turret" 2)
+                (1, createBasicRobot (10, 20) "aggressive" 1),
+                --(2, createBasicRobot ( 15, 10) "turret" 2),
+                (3, createBasicRobot ( -20,-20) "stupid" 3)
             ]
     backgroundImage <- loadBackgroundImage "background.jpg"
     let initialState = GameState 

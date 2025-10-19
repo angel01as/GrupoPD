@@ -27,7 +27,7 @@ import Data.Maybe (fromMaybe)
 import Data.List (minimumBy)
 import Prelude hiding (sequence, repeat)
 import GameState
-
+import Debug.Trace
 -- ============================================================================
 -- DSL PARA ACCIONES DEL BOT
 -- ============================================================================
@@ -357,8 +357,12 @@ updateRobotAI robot gs deltaTime =
       -- Decidir comportamiento
       commands = decideBotBehavior behavior gs robotWithUpdatedCooldown
 
+      -- Usamos trace para debug: Muestra el primer argumento y devuelve el segundo. Por ejecución perezosa hay que utilizar "debug".
+      debug
+        | floor (gameTime gs + deltaTime) > floor (gameTime gs) = trace (show (robotID robot) ++ ": " ++ show commands) commands
+        | otherwise = commands
       -- Ejecutar comandos
-      result = executeAICommands commands robotWithUpdatedCooldown deltaTime
+      result = executeAICommands debug robotWithUpdatedCooldown deltaTime
 
       -- Actualizar tiempo de última actualización y eliminar waitingTime si procede.
       preFinalRobot = (updatedRobot result) { robotLastUpdateTime = gameTime gs }
