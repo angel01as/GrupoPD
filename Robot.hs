@@ -106,7 +106,9 @@ updateRobotVelocity :: Robot -> MovementAction -> Robot
 updateRobotVelocity r (MultiplyVelocity speed) = setVelocity r (prodByScalar speed (velocity r))
 updateRobotVelocity r (Rotate angleDif) = setVelocity rotatedRobot reducedVelocity
   where
-    rotatedRobot = updateOrientation r angleDif
+    -- Tenemos que girar el robot, su torreta y sus vértices.
+    rotatedTurret = (robotTurret r) { turretOrientation = turretOrientation (robotTurret r) + angleDif }
+    rotatedRobot = (updateOrientation r angleDif) { robotTurret = rotatedTurret }
     reducedVelocity = prodByScalar (1 - angleDif/(2*pi)) (velocity r)
 updateRobotVelocity r (MoveForward speed) = setVelocity r (add2D (velocity r) (prodByScalar speed (angleFactor (orientation r))))
 updateRobotVelocity r (MoveBackward speed) = setVelocity r (subVec (velocity r) (prodByScalar speed (angleFactor (orientation r))))

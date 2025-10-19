@@ -271,7 +271,7 @@ defensiveBot gs robot =
     )
 
 stupidBot :: BotBehavior
-stupidBot gs robot = sequence [wait 1, move 1]
+stupidBot gs robot = sequence [wait 1, move 1, rotate (pi/16)]
 
 -- Bot de ejemplo simple
 exampleBot :: BotBehavior
@@ -333,8 +333,8 @@ executeCommand _ (robot, projectiles, explosions) (SetMemoryCommand key value) =
 executeCommand _ (robot, projectiles, explosions) (ClearMemoryCommand key) =
   (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
 
-executeCommand _ (robot, projectiles, explosions) (RotateTurretCommand angle) =
-  (robot { robotTurret = turret { turretOrientation = turretOrientation turret + angle } }, projectiles, explosions)
+executeCommand deltaTime (robot, projectiles, explosions) (RotateTurretCommand angle) =
+  (robot { robotTurret = turret { turretOrientation = turretOrientation turret + angle * deltaTime } }, projectiles, explosions)
   where turret = robotTurret robot
 
 -- Actualiza un robot con su comportamiento AI

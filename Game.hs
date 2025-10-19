@@ -160,8 +160,8 @@ drawGame gs
       where
         (x, y) = position r
         (sx, sy) = size r
-        robotOrientation = radToDeg (orientation r)
-        turretAngle = radToDeg (turretOrientation (robotTurret r))
+        robotOrientation = -radToDeg (orientation r) -- Gloss usa rotación en sentido horario expresada en grados y nosotros rotación antihoraria expresada en radianes.
+        turretAngle = -radToDeg (turretOrientation (robotTurret r))
         
         -- Tanque (cuerpo del robot)
         tank = Color (if isRobotAlive r then (makeColor 0.2 0.4 0.2 1.0) else (makeColor 0.5 0.5 0.5 1.0)) $
