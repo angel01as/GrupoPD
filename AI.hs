@@ -192,7 +192,7 @@ findNearestEnemy robot enemies =
 
 -- Verifica si el robot está cerca del borde del mapa
 isNearMapEdge :: GameState -> Robot -> Bool
-isNearMapEdge gs robot = 
+isNearMapEdge gs robot =
   let (x, y) = position robot
       (mapWidth, mapHeight) = gameStageSize gs
       margin = 10  -- Margen de seguridad desde el borde
@@ -269,6 +269,14 @@ defensiveBot gs robot =
         wait 0.2
       ])
     )
+
+turretBot :: BotBehavior
+turretBot gs robot = sequence [
+        rotateTurret (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot)),
+        wait 1,
+        shoot,
+        wait 1
+        ]
 
 stupidBot :: BotBehavior
 stupidBot gs robot = sequence [wait 1, move 1, rotate (pi/16)]
@@ -362,7 +370,7 @@ updateRobotAI robot gs deltaTime =
           waitFinalRobot
             | memLEQ currentWaitingTime (ScalarValue 0) = preFinalRobot { robotMemory = Map.delete "waitingTime" (robotMemory preFinalRobot)}
             | otherwise = preFinalRobot
-            where 
+            where
               memLEQ :: MemoryValue -> MemoryValue -> Bool
               memLEQ (ScalarValue x) (ScalarValue y) = x <= y
               currentWaitingTime = (robotMemory preFinalRobot) Map.! "waitingTime"
@@ -373,4 +381,5 @@ getBehaviorByName :: String -> BotBehavior
 getBehaviorByName "aggressive" = aggressiveBot
 getBehaviorByName "defensive" = defensiveBot
 getBehaviorByName "stupid" = stupidBot
+getBehaviorByName "turret" = turretBot
 getBehaviorByName _ = aggressiveBot -- Comportamiento por defecto
