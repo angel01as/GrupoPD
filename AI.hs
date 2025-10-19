@@ -8,9 +8,9 @@ module AI (
   BotInstruction(..),
   AIExecutionResult(..),
   -- Funciones del DSL
-  move, moveBackward, rotate, multiplyVelocity, shoot, wait, ifThen, ifThenElse, sequence,
+  move, moveBackward, rotate, multiplyVelocity, shoot, wait, rotateTurret, ifThen, ifThenElse, sequence,
   -- Condiciones
-  hasTarget, isLowEnergy, isUnderAttack, distanceTo, angleTo,
+  hasTarget, isLowEnergy, isUnderAttack, distanceTo, angleTo, isNearMapEdgeCondition,
   -- Decisor de comportamientos
   decideBotBehavior,
   -- Ejecutor de comandos
@@ -39,6 +39,7 @@ data BotCommand
   | WaitCommand Scalar              -- Esperar un tiempo
   | SetMemoryCommand String MemoryValue  -- Guardar valor en memoria
   | ClearMemoryCommand String       -- Limpiar memoria
+  | RotateTurretCommand Angle       -- Rotar la torreta
   deriving (Show, Eq)
 
 -- Condiciones que puede evaluar un bot
@@ -49,6 +50,7 @@ data BotCondition
   | DistanceToTarget Scalar      -- ¿Distancia al enemigo < X?
   | AngleToTarget Angle          -- ¿Ángulo al enemigo < X?
   | MemoryEquals String MemoryValue  -- ¿Memoria tiene valor X?
+  | IsNearMapEdge                -- ¿Está cerca del borde del mapa?
   | Not BotCondition             -- Negación lógica
   | And BotCondition BotCondition    -- Y lógico
   | Or BotCondition BotCondition     -- O lógico
@@ -88,6 +90,9 @@ shoot = Simple ShootCommand
 wait :: Scalar -> BotInstruction
 wait time = Simple (WaitCommand time)
 
+rotateTurret :: Angle -> BotInstruction
+rotateTurret angle = Simple (RotateTurretCommand angle)
+
 setMemory :: String -> MemoryValue -> BotInstruction
 setMemory key value = Simple (SetMemoryCommand key value)
 
@@ -126,6 +131,9 @@ angleTo = AngleToTarget
 memoryEquals :: String -> MemoryValue -> BotCondition -- ¿Tengo guardado en memoria un valor específico?
 memoryEquals = MemoryEquals
 
+isNearMapEdgeCondition :: BotCondition
+isNearMapEdgeCondition = IsNearMapEdge
+
 -- ============================================================================
 -- EVALUADOR DE CONDICIONES
 -- ============================================================================
@@ -163,6 +171,9 @@ evalCondition (MemoryEquals key value) _ robot = -- _ es el estado del juego y e
     Nothing -> False
     Just memValue -> value == memValue
 
+-- CONDICIÓN: ¿Está el robot cerca del borde del mapa?
+evalCondition IsNearMapEdge gs robot = isNearMapEdge gs robot
+
 -- OPERADORES LÓGICOS
 evalCondition (Not cond) gs robot = not (evalCondition cond gs robot)
 evalCondition (And cond1 cond2) gs robot =
@@ -178,6 +189,15 @@ findNearestEnemy robot enemies =
      then Nothing
      else Just (minimumBy (\a b -> compare (distanceBetween (position robot) (position a))
                                            (distanceBetween (position robot) (position b))) aliveEnemies)
+
+-- Verifica si el robot está cerca del borde del mapa
+isNearMapEdge :: GameState -> Robot -> Bool
+isNearMapEdge gs robot = 
+  let (x, y) = position robot
+      (mapWidth, mapHeight) = gameStageSize gs
+      margin = 10  -- Margen de seguridad desde el borde
+  in x < (-mapWidth/2 + margin) || x > (mapWidth/2 - margin) ||
+     y < (-mapHeight/2 + margin) || y > (mapHeight/2 - margin)
 
 -- ============================================================================
 -- DECISOR DE COMPORTAMIENTOS
@@ -210,8 +230,8 @@ aggressiveBot gs robot =
     (sequence [
       -- Si tiene objetivo, apuntar y disparar
       setMemory "mode" (StringValue "attacking"),
-      rotate (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - orientation robot),
-      shoot,
+      rotateTurret (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot)),
+      ifThen (And hasTarget (Not (isLowEnergy 10))) shoot,  -- Solo disparar si el objetivo sigue vivo y tenemos energía
       move 1.0
     ])
     (sequence [
@@ -227,23 +247,24 @@ defensiveBot :: BotBehavior
 defensiveBot gs robot =
   ifThenElse (isLowEnergy 30)
     (sequence [
-      -- Si tiene poca energía, huir
+      -- Si tiene poca energía, huir pero sin salirse del mapa
       setMemory "mode" (StringValue "fleeing"),
-      moveBackward 2.0,  -- Moverse hacia atrás
-      rotate (pi),  -- Girar 180 grados
-      wait 1.0
+      ifThen isNearMapEdgeCondition (rotate (pi/2)),  -- Si está cerca del borde, girar
+      moveBackward 1.0,  -- Moverse hacia atrás más despacio
+      wait 0.5
     ])
     (ifThenElse hasTarget
       (sequence [
         -- Si tiene objetivo y energía suficiente, atacar
         setMemory "mode" (StringValue "attacking"),
-        rotate (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - orientation robot),
-        shoot
+        rotateTurret (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot)),
+        ifThen (And hasTarget (Not (isLowEnergy 10))) shoot  -- Solo disparar si el objetivo sigue vivo
       ])
       (sequence [
         -- Patrullar
         setMemory "mode" (StringValue "patrolling"),
-        move 1,
+        ifThen isNearMapEdgeCondition (rotate (pi/2)),  -- Si está cerca del borde, girar
+        move 0.5,  -- Moverse más despacio
         rotate (pi/8),
         wait 0.2
       ])
@@ -311,6 +332,10 @@ executeCommand _ (robot, projectiles, explosions) (SetMemoryCommand key value) =
 
 executeCommand _ (robot, projectiles, explosions) (ClearMemoryCommand key) =
   (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
+
+executeCommand _ (robot, projectiles, explosions) (RotateTurretCommand angle) =
+  (robot { robotTurret = turret { turretOrientation = turretOrientation turret + angle } }, projectiles, explosions)
+  where turret = robotTurret robot
 
 -- Actualiza un robot con su comportamiento AI
 updateRobotAI :: Robot -> GameState -> Scalar -> AIExecutionResult
