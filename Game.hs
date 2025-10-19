@@ -421,7 +421,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
     insertSpawnedProjectiles nextID m (p:ps) = insertSpawnedProjectiles (nextID + 1) newM ps
         where
             newM = Map.insert nextID (p { projectileID = nextID }) m
-    -- Metemos cada proyectil con ID = tamaño de m 
+    -- Metemos cada proyectil con ID = Total histórico de proyectiles. 
     totalProjectileCount = gameTotalProjectileCount collisionState
     allProjectiles = insertSpawnedProjectiles totalProjectileCount (gameProjectiles collisionState) spawnedProjectiles
     -- FIN DE IA --

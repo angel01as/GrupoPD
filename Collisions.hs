@@ -30,7 +30,6 @@ type RobotRobotCollisionEvent      = (Robot, Robot)
 -- Comprobar el cruce de los rangos del minimo al maximo de cada poligono, si en uno de estos NO hay cruce, no colisionan
 
 -- checkCollision: Comprueba si dos rectángulos han colisionado utilizando el algoritmo apropiado.
--- all id significa que todos los elementos de la lista son True
 checkCollision :: [Point] -> [Point] -> Bool
 checkCollision [] _ = error "El primer polígono no debe estar vacío"
 checkCollision _ [] = error "El segundo polígono no debe estar vacío"
@@ -45,7 +44,7 @@ checkCollision ra rb = and [ hayInterseccion a b | (a,b) <- zip rangosA rangosB 
 obtenVPerp :: [Point] -> [Vector]
 obtenVPerp ps = [perp (sub p2 p1) | (p1, p2) <- zip ps (tail ps ++ [head ps])]
 
--- Comprueba si dos rangos intersecan. Hacer any sobre todos ellos para ver si hay huecos.
+-- Comprueba si dos rangos intersecan.
 hayInterseccion :: Scalar2D -> Scalar2D -> Bool
 hayInterseccion (amin, amax) (bmin, bmax) = not (amax < bmin || bmax < amin)
 
