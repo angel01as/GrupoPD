@@ -15,7 +15,8 @@ module Robot (
   shootProjectile,
   afterShooting,
   createBasicRobot,
-  multiplyMovementAction
+  multiplyMovementAction,
+  getMovementActionValue
 ) where
 
 import Entities
@@ -75,6 +76,13 @@ multiplyMovementAction factor (MoveForward s) = MoveForward (factor * s)
 multiplyMovementAction factor (MoveBackward s) = MoveBackward (factor * s)
 multiplyMovementAction factor (Rotate a) = Rotate (factor * a)
 multiplyMovementAction factor (MultiplyVelocity s) = MultiplyVelocity (factor * s)
+
+-- Sacamos el valor envuelto
+getMovementActionValue :: MovementAction -> Scalar
+getMovementActionValue (MoveForward s)       = s
+getMovementActionValue (MoveBackward s)      = s
+getMovementActionValue (Rotate a)            = a
+getMovementActionValue (MultiplyVelocity s)  = s
 
 -- Tipo de datos flexible para almacenar diferentes tipos de información
 data MemoryValue 
