@@ -24,5 +24,6 @@ data GameState = GameState
     gameTotalProjectileCount :: Int,
     gameTotalExplosionCount :: Int,
     gameSimulationSpeed :: Scalar,
-    gameDebugInfo :: Bool
+    gameDebugInfo :: Bool,
+    gamePaused :: Bool
   } deriving (Show, Eq)

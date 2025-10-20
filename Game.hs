@@ -101,20 +101,25 @@ playGame initialState = play window backgroundColor fps initialState drawGame (h
         preUpdateGame :: Float -> GameState -> GameState
         preUpdateGame dt gs
           | Set.member (Char 'r') (gameKeysPressed gs) = initialState { gameSimulationSpeed = gameSimulationSpeed gs, gameDebugInfo = gameDebugInfo gs, gameWindowSize = gameWindowSize gs} -- Reiniciamos el juego al pulsar 'r'. Nótese que initialState no tiene 'r' pulsado y no se volverá a añadir hasta que se suelte y vuelva pulsar la tecla.
-          | Set.member (Char 'd') keys = updateGame dt (gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys }) -- Cambiamos el modo debug y limpiamos la tecla.
-          | Set.member (Char '1') keys = updateGame dt (gs { gameSimulationSpeed = 0.1 }) -- Cambiamos la velocidad de simulación.
-          | Set.member (Char '2') keys = updateGame dt (gs { gameSimulationSpeed = 0.25 })
-          | Set.member (Char '3') keys = updateGame dt (gs { gameSimulationSpeed = 0.5 })
-          | Set.member (Char '4') keys = updateGame dt (gs { gameSimulationSpeed = 0.75 })
-          | Set.member (Char '5') keys = updateGame dt (gs { gameSimulationSpeed = 1.0 })
-          | Set.member (Char '6') keys = updateGame dt (gs { gameSimulationSpeed = 1.25 })
-          | Set.member (Char '7') keys = updateGame dt (gs { gameSimulationSpeed = 1.5 })
-          | Set.member (Char '8') keys = updateGame dt (gs { gameSimulationSpeed = 2.0 })
-          | Set.member (Char '9') keys = updateGame dt (gs { gameSimulationSpeed = 2.5 })
-          | Set.member (Char '0') keys = updateGame dt (gs { gameSimulationSpeed = 3.0 })
-          | otherwise                  = updateGame dt gs
+          | Set.member (SpecialKey KeySpace) keys && gamePaused gs = updateGame dt (preUpdatedState { gamePaused = (not . gamePaused) gs, gameKeysPressed = Set.delete (SpecialKey KeySpace) keys }) -- Cambiamos el modo pausa y limpiamos la tecla.
+          | Set.member (SpecialKey KeySpace) keys && not (gamePaused gs) = preUpdatedState { gamePaused = (not . gamePaused) gs, gameKeysPressed = Set.delete (SpecialKey KeySpace) keys } -- Cambiamos el modo pausa y limpiamos la tecla.
+          | gamePaused gs = preUpdatedState -- El juego está en pausa.
+          | otherwise = updateGame dt preUpdatedState
           where
             keys = gameKeysPressed gs
+            preUpdatedState
+              | Set.member (Char 'd') keys = gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys } -- Cambiamos el modo debug y limpiamos la tecla.
+              | Set.member (Char '1') keys = gs { gameSimulationSpeed = 0.1 }
+              | Set.member (Char '2') keys = gs { gameSimulationSpeed = 0.25 }
+              | Set.member (Char '3') keys = gs { gameSimulationSpeed = 0.5 }
+              | Set.member (Char '4') keys = gs { gameSimulationSpeed = 0.75 }
+              | Set.member (Char '5') keys = gs { gameSimulationSpeed = 1.0 }
+              | Set.member (Char '6') keys = gs { gameSimulationSpeed = 1.25 }
+              | Set.member (Char '7') keys = gs { gameSimulationSpeed = 1.5 }
+              | Set.member (Char '8') keys = gs { gameSimulationSpeed = 2.0 }
+              | Set.member (Char '9') keys = gs { gameSimulationSpeed = 2.5 }
+              | Set.member (Char '0') keys = gs { gameSimulationSpeed = 3.0 }
+              | otherwise = gs
 
 -- === CARGA DE IMÁGENES ===
 -- Función para cargar imagen de fondo (retorna Nothing si falla)
@@ -230,12 +235,16 @@ drawGame gs
         textScale = min (windowWidth / baseWindowWidth) (windowHeight / baseWindowHeight) * 0.2 -- min: toma el menor de los dos valores para mantener proporciones
         
         timeDisplay = Color white $ Translate leftMargin (topMargin - 30) $ Scale textScale textScale $ 
-                      Text ("Tiempo: " ++ show (round (gameTime gs) :: Int) ++ "s")
+                      Text ("Tiempo: " ++ show (round (gameTime gs) :: Int) ++ "s" ++ pauseText)
+                      where
+                        pauseText
+                          | gamePaused gs = " (En Pausa)"
+                          | otherwise = ""
         
         robotCount = Color white $ Translate leftMargin (topMargin - 60) $ Scale textScale textScale $ 
                      Text ("Robots vivos: " ++ show (length (gameRobots gs)))
         hotkeys = Color white $ Translate leftMargin (topMargin - 90) $ Scale textScale textScale $
-                      Text "Reset: R | Debug: D | Velocidad: 1..0"
+                      Text "Reset: R | Debug: D | Velocidad: 1..0 | Pausa: Espacio"
     
     drawAllVertices :: Picture
     drawAllVertices = Pictures vertsDrawings

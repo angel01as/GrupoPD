@@ -32,6 +32,7 @@ main = do
                                 gameTotalProjectileCount = 0,
                                 gameTotalExplosionCount = 0,
                                 gameSimulationSpeed = 1,
-                                gameDebugInfo = True
+                                gameDebugInfo = True,
+                                gamePaused = False
                             }
     playGame initialState
