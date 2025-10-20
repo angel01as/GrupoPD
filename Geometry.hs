@@ -48,6 +48,10 @@ rotateVertices ps theta = map (rotarCentro theta (centroid ps)) ps
           y' = dx * s + dy * c
       in (x' + cx, y' + cy)
 
+-- Rota un vector por un ángulo dado (centrado en origen)
+rotateVector :: Vector -> Angle -> Vector
+rotateVector (x, y) angle = (x * cos angle - y * sin angle, x * sin angle + y * cos angle)
+
 -- Calcula el centroide
 centroid :: [Point] -> Point
 centroid ps = prodByScalar (1/numPts) (foldr1 add2D ps)

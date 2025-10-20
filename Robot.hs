@@ -104,12 +104,12 @@ countActiveRobots lr = length lv
 -- Actualizar velocidad basada en la acción de movimiento informada por el bot.
 updateRobotVelocity :: Robot -> MovementAction -> Robot
 updateRobotVelocity r (MultiplyVelocity speed) = setVelocity r (prodByScalar speed (velocity r))
-updateRobotVelocity r (Rotate angleDif) = setVelocity rotatedRobot reducedVelocity
+updateRobotVelocity r (Rotate angleDif) = setVelocity rotatedRobot rotatedVelocity
   where
     -- Tenemos que girar el robot, su torreta y sus vértices.
     rotatedTurret = (robotTurret r) { turretOrientation = turretOrientation (robotTurret r) + angleDif }
     rotatedRobot = (updateOrientation r angleDif) { robotTurret = rotatedTurret }
-    reducedVelocity = prodByScalar (1 - angleDif/(2*pi)) (velocity r)
+    rotatedVelocity = rotateVector (velocity r) angleDif
 updateRobotVelocity r (MoveForward speed) = setVelocity r (add2D (velocity r) (prodByScalar speed (angleFactor (orientation r))))
 updateRobotVelocity r (MoveBackward speed) = setVelocity r (subVec (velocity r) (prodByScalar speed (angleFactor (orientation r))))
 
@@ -160,7 +160,7 @@ createBasicRobot pos behaviorName newID = Rob
   , robotVertices = map (add2D pos) [(-4, -4), (4, -4), (4, 4), (-4, 4)]
   , robotEnergy = 100
   , robotMaxEnergy = 100
-  , robotRadarRange = 25
+  , robotRadarRange = 35
   , robotOrientation = 0
   , robotTurret = Turr
     { turretOrientation = 0

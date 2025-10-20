@@ -231,6 +231,8 @@ aggressiveBot gs robot =
       -- Si tiene objetivo, apuntar y disparar
       setMemory "mode" (StringValue "attacking"),
       rotateTurret (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot)),
+      -- Evitar bordes del mapa
+      ifThen isNearMapEdgeCondition (rotate (pi/2)),
       ifThen (And hasTarget (Not (isLowEnergy 10))) shoot,  -- Solo disparar si el objetivo sigue vivo y tenemos energía
       move 1.0
     ])
@@ -238,6 +240,8 @@ aggressiveBot gs robot =
       -- Si no tiene objetivo, buscar
       setMemory "mode" (StringValue "searching"),
       rotate (pi/4),  -- Girar 45 grados
+      -- Evitar bordes del mapa
+      ifThen isNearMapEdgeCondition (rotate (pi/2)),
       move 0.5,
       wait 0.1
     ])
@@ -279,7 +283,19 @@ turretBot gs robot = sequence [
         ]
 
 stupidBot :: BotBehavior
-stupidBot gs robot = sequence [wait 1, move 1, rotate (pi/16)]
+stupidBot gs robot = 
+  ifThenElse isNearMapEdgeCondition
+    (sequence [
+      -- Si está cerca del borde, girar 90 grados para cambiar dirección
+      rotate (pi/2),
+      wait 0.5
+    ])
+    (sequence [
+      -- Si no está cerca del borde, comportamiento normal
+      wait 1, 
+      move 1, 
+      rotate (pi/16)
+    ])
 
 -- Bot de ejemplo simple
 exampleBot :: BotBehavior
