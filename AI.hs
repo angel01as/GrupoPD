@@ -40,6 +40,8 @@ data BotCommand
   | SetMemoryCommand String MemoryValue  -- Guardar valor en memoria
   | ClearMemoryCommand String       -- Limpiar memoria
   | RotateTurretCommand Angle       -- Rotar la torreta
+  | DoNothingCommand
+  | ClearBlockCommand
   deriving (Show, Eq)
 
 -- Condiciones que puede evaluar un bot
@@ -102,7 +104,7 @@ clearMemory key = Simple (ClearMemoryCommand key)
 
 -- Combinadores de instrucciones
 ifThen :: BotCondition -> BotInstruction -> BotInstruction
-ifThen cond instruction = Conditional cond instruction (Simple (WaitCommand 0))
+ifThen cond instruction = Conditional cond instruction (Simple DoNothingCommand)
 
 ifThenElse :: BotCondition -> BotInstruction -> BotInstruction -> BotInstruction
 ifThenElse = Conditional
@@ -233,7 +235,7 @@ aggressiveBot gs robot =
     (sequence [
       -- Si tiene objetivo, apuntar y disparar
       setMemory "mode" (StringValue "attacking"),
-      rotateTurret (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot)),
+      ifThenElse (BoolCondition (abs(angleDifToTarget) > 5e-1)) (rotateTurret angleDifToTarget) (Simple ClearBlockCommand),
       -- Evitar bordes del mapa
       ifThen isNearMapEdgeCondition (rotate (pi/2)),
       ifThen (And hasTarget (Not (isLowEnergy 10))) shoot,  -- Solo disparar si el objetivo sigue vivo y tenemos energía
@@ -248,6 +250,7 @@ aggressiveBot gs robot =
       move 0.5,
       wait 0.1
     ])
+    where angleDifToTarget = (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot))
 
 -- Bot defensivo que evita enemigos cuando tiene poca energía
 defensiveBot :: BotBehavior
@@ -422,6 +425,11 @@ executeCommand _ (robot, projectiles, explosions) _ (SetMemoryCommand key value)
 
 executeCommand _ (robot, projectiles, explosions) _ (ClearMemoryCommand key) =
   (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
+executeCommand _ (robot, projectiles, explosions) _ DoNothingCommand =
+  (robot, projectiles, explosions)
+
+executeCommand _ (robot, projectiles, explosions) _ ClearBlockCommand =
+  (clearBlockPoint robot, projectiles, explosions)
 -- Bloqueante
 executeCommand deltaTime (robot, projectiles, explosions) (index, seqLen) (RotateTurretCommand angle)
   | Map.member "blockPoint" (robotMemory robot) = (updatedRobotWhileBlocking, projectiles, explosions)
