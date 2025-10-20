@@ -16,6 +16,7 @@ data GameState = GameState
     gameProjectiles :: Map.Map ID Projectile, -- Proyectiles
     gameExplosions :: Map.Map ID Explosion,
     gameTime :: Scalar, -- Tiempo actual del juego
+    gameFrame :: Int, -- Frame actual del juego
     gameWindowSize :: (Int, Int),
     gameStageSize :: Size, -- Tamaño interno del escenario.
     gameBackground :: Maybe Picture,
