@@ -374,8 +374,15 @@ type BotCommandContext = (BotCommandIndex, Int) -- Índice y número total de co
 
 executeCommand :: Scalar -> (Robot, [Projectile], [Explosion]) -> BotCommandContext -> BotCommand -> (Robot, [Projectile], [Explosion])
 -- TODO: Hacer blocking
-executeCommand deltaTime (robot, projectiles, explosions) _ (MovementCommand action) =
-  (updateRobotVelocity robot (multiplyMovementAction deltaTime action), projectiles, explosions)
+executeCommand deltaTime (robot, projectiles, explosions) (index, seqLen) (MovementCommand action)
+  | Map.member "blockPoint" (robotMemory robot) = (updatedRobotWhileBlocking, projectiles, explosions)
+  | otherwise = (createBlockPoint appliedRobot index seqLen deltaTime 0, projectiles, explosions)
+  where
+    appliedRobot = updateRobotVelocity robot (multiplyMovementAction deltaTime action)
+    acc = (\(ScalarValue x) -> x) $ Map.findWithDefault (ScalarValue deltaTime) "blockPointAcumulator" (robotMemory robot)
+    updatedRobotWhileBlocking
+      | acc - deltaTime > 1e-5 = appliedRobot { robotMemory = Map.insert "blockPointAcumulator" (ScalarValue (acc - deltaTime)) (robotMemory appliedRobot) }
+      | otherwise = clearBlockPoint appliedRobot
 
 executeCommand _ (robot, projectiles, explosions) _ ShootCommand =
   case shootProjectile robot of
@@ -399,9 +406,16 @@ executeCommand _ (robot, projectiles, explosions) _ (ClearMemoryCommand key) =
   (robot { robotMemory = Map.delete key (robotMemory robot) }, projectiles, explosions)
 
 -- TODO: Hacer blocking
-executeCommand deltaTime (robot, projectiles, explosions) index (RotateTurretCommand angle) =
-  (robot { robotTurret = turret { turretOrientation = turretOrientation turret + angle * deltaTime } }, projectiles, explosions)
-  where turret = robotTurret robot
+executeCommand deltaTime (robot, projectiles, explosions) (index, seqLen) (RotateTurretCommand angle)
+  | Map.member "blockPoint" (robotMemory robot) = (updatedRobotWhileBlocking, projectiles, explosions)
+  | otherwise = (createBlockPoint appliedRobot index seqLen deltaTime 0, projectiles, explosions)
+  where
+    turret = robotTurret robot
+    appliedRobot = robot { robotTurret = turret { turretOrientation = turretOrientation turret + angle * deltaTime } }
+    acc = (\(ScalarValue x) -> x) $ Map.findWithDefault (ScalarValue deltaTime) "blockPointAcumulator" (robotMemory robot)
+    updatedRobotWhileBlocking
+      | acc - deltaTime > 1e-5 = appliedRobot { robotMemory = Map.insert "blockPointAcumulator" (ScalarValue (acc - deltaTime)) (robotMemory appliedRobot) }
+      | otherwise = clearBlockPoint appliedRobot
 
 -- Actualiza un robot con su comportamiento AI
 updateRobotAI :: Robot -> GameState -> Scalar -> AIExecutionResult
