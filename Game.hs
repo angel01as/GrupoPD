@@ -1,6 +1,6 @@
 -- Módulo que implementa el bucle principal del juego.
 
-module Game (playGame, loadBackgroundImage) where
+module Game (playGame, loadBackgroundImage, drawGame) where
 
 import Graphics.Gloss hiding (Vector, Point)
 import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
