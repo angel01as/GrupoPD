@@ -7,10 +7,11 @@ import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
 import Graphics.Gloss.Juicy
 
 import Geometry
-import Robot (Robot(..), Turret(..), isRobotAlive)
+import Robot (Robot(..), Turret(..), isRobotAlive, createBasicRobot)
 import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), updateExplosion, isExplosionActive, isExplosionDamaging, createExplosion)
 import qualified AI
 import GameState
+import RandomUtils (generatePositionFromSeed)
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -91,6 +92,45 @@ pixel2Meter gs px = px * getPixel2MeterFactor gs
 meter2Pixel :: GameState -> Scalar -> Pixel
 meter2Pixel gs m = m * getMeter2PixelFactor gs
 
+-- Regenera los robots con nuevas posiciones aleatorias basadas en una semilla
+-- Esta función se llama cuando el jugador presiona 'R' para resetear el juego
+--
+-- Parámetros:
+--   currentState:  Estado actual del juego (contiene el tiempo transcurrido que se usa como semilla)
+--   initialState:  Estado inicial limpio del juego (sin proyectiles, explosiones, etc.)
+--
+-- Retorna: Un nuevo estado de juego con robots reposicionados aleatoriamente
+regenerateRobotsWithRandomPositions :: GameState -> GameState -> GameState
+regenerateRobotsWithRandomPositions currentState initialState = 
+  initialState { 
+    gameRobots = newRobots,
+    gameSimulationSpeed = gameSimulationSpeed currentState,
+    gameDebugInfo = gameDebugInfo currentState,
+    gameWindowSize = gameWindowSize currentState,
+    gameBackground = gameBackground currentState
+  }
+  where
+    -- Usar el tiempo actual del juego como semilla para generar nuevas posiciones
+    -- Por ejemplo, si han pasado 45.7 segundos, seedBase = 45.7
+    -- Esto garantiza que cada reset tenga posiciones diferentes
+    seedBase = gameTime currentState
+    
+    stageSize = gameStageSize initialState  -- Tamaño del escenario (ej: 100x70)
+    
+    -- Calcular los límites (bounds) del área jugable
+    -- bounds = (mitad del ancho, mitad del alto) → si stageSize = (100, 70), entonces bounds = (50, 35)
+    bounds = (fst stageSize / 2, snd stageSize / 2)
+    
+    -- Obtener los IDs y comportamientos de los robots originales
+    originalRobots = Map.elems (gameRobots initialState)
+    robotInfos = [(robotID r, robotBehavior r) | r <- originalRobots]
+    
+    -- Generar nuevos robots con posiciones aleatorias pero manteniendo sus IDs y comportamientos
+    -- Para cada robot, generamos una nueva posición usando bounds, seedBase y su ID
+    newRobots = Map.fromList [
+        (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
+        | (rid, behavior) <- robotInfos
+      ]
 
 playGame :: GameState -> IO()
 playGame initialState = play window backgroundColor fps initialState drawGame (handleEvents [tryHandleResizing, tryHandleKeys]) preUpdateGame
@@ -100,7 +140,7 @@ playGame initialState = play window backgroundColor fps initialState drawGame (h
         window = InWindow "Juego de tanques " (gameWindowSize initialState) (100, 100)
         preUpdateGame :: Float -> GameState -> GameState
         preUpdateGame dt gs
-          | Set.member (Char 'r') (gameKeysPressed gs) = initialState { gameSimulationSpeed = gameSimulationSpeed gs, gameDebugInfo = gameDebugInfo gs, gameWindowSize = gameWindowSize gs} -- Reiniciamos el juego al pulsar 'r'. Nótese que initialState no tiene 'r' pulsado y no se volverá a añadir hasta que se suelte y vuelva pulsar la tecla.
+          | Set.member (Char 'r') (gameKeysPressed gs) = regenerateRobotsWithRandomPositions gs initialState -- Reiniciamos el juego con posiciones aleatorias al pulsar 'r'. Usa gameTime del estado actual como semilla.
           | Set.member (SpecialKey KeySpace) keys && gamePaused gs = updateGame dt (preUpdatedState { gamePaused = (not . gamePaused) gs, gameKeysPressed = Set.delete (SpecialKey KeySpace) keys }) -- Cambiamos el modo pausa y limpiamos la tecla.
           | Set.member (SpecialKey KeySpace) keys && not (gamePaused gs) = preUpdatedState { gamePaused = (not . gamePaused) gs, gameKeysPressed = Set.delete (SpecialKey KeySpace) keys } -- Cambiamos el modo pausa y limpiamos la tecla.
           | gamePaused gs = preUpdatedState -- El juego está en pausa.
