@@ -62,9 +62,10 @@ tryHandleKeys event state = -- Si el evento es una tecla presionada o liberada, 
     EventKey k Up   _ _ -> Just $ deleteKey state k
     _                   -> Nothing
 
-tryHandleMouse :: (MouseButtonState mbs) => Event -> mbs -> Maybe mbs
-tryHandleMouse event state = 
-  case event of
+tryHandleMouse :: Event -> GameState -> Maybe GameState
+tryHandleMouse event state
+  | not (gameIsInMenu state) = Nothing
+  | otherwise = case event of
     EventKey (MouseButton LeftButton) Up _ (x, y) -> Just $ handleLeftClick state (x, y) -- (x,y) es la posición del click.
     _ -> Nothing
 
