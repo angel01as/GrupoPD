@@ -3,9 +3,16 @@ import Robot (createBasicRobot)
 import GameState
 import RandomUtils (generatePositionFromSeed)
 
-import qualified Data.Map as Map (fromList)
+import qualified Data.Map as Map (Map, fromList, insert, empty)
 import qualified Data.Set as Set
 import Data.Time.Clock.POSIX (getPOSIXTime)
+
+import Graphics.Gloss(Picture)
+import Graphics.Gloss.Juicy(loadJuicy)
+
+import Rendering(usedImages)
+import Data.Default
+import UIButton
 
 -- Punto de entrada al juego.
 
@@ -36,22 +43,74 @@ main = do
                 (2, createBasicRobot pos2 "defensive" 2),
                 (3, createBasicRobot pos3 "stupid" 3)
             ]
-    backgroundImage <- loadBackgroundImage "background.jpg"
-    let initialState = GameState 
+    imagesMap <- loadImages usedImages
+    let initialState = def 
                             { 
                                 gameWindowSize = window,
                                 gameRobots = robots,
-                                gameProjectiles = Map.fromList [],
-                                gameTime = 0,
-                                gameFrame = 0,
-                                gameExplosions = Map.fromList [],
                                 gameStageSize = (100, 70),
-                                gameBackground = backgroundImage,
-                                gameKeysPressed = Set.empty,
-                                gameTotalProjectileCount = 0,
-                                gameTotalExplosionCount = 0,
-                                gameSimulationSpeed = 1,
-                                gameDebugInfo = True,
-                                gamePaused = False
+                                gameImages = imagesMap,
+                                gameSeed = seedBase,
+                                gameButtons = makeButtons
                             }
     playGame initialState
+
+-- Carga varias imágenes y devuelve un diccionario con las rutas como clave
+loadImages :: [String] -> IO (Map.Map String Picture)
+loadImages [] = pure Map.empty -- Como IO es una mónada hay que envolver los valores
+loadImages (p:ps) = do
+  maybePic <- loadJuicy p
+  rest <- loadImages ps
+  case maybePic of
+    Just pic -> pure $ Map.insert p pic rest
+    Nothing  -> do
+      putStrLn $ "[X] No se pudo cargar: " ++ p
+      pure rest
+
+makeButtons :: [UIButton GameState]
+makeButtons =
+  (playButton) : concatMap rowButtons [(-1) .. 1] 
+  where
+    buttonColumnCenter = 0.25
+    buttonOffsetX = 0.075
+    btnSize = (0.10, 0.10)
+    rowButtons i =
+        [ UIButton
+            {   
+                buttonPosition = (buttonColumnCenter - buttonOffsetX, y),
+                buttonSize     = btnSize,
+                buttonText     = "-",
+                buttonHandler  = getLeftHandler i
+            }
+        , UIButton
+            {   
+                buttonPosition = (buttonColumnCenter + buttonOffsetX, y),
+                buttonSize     = btnSize,
+                buttonText     = "+",
+                buttonHandler  = getRightHandler i
+            }
+        ]
+        where
+            y = fromIntegral i * 0.25
+
+            getLeftHandler :: Int -> (GameState -> GameState)
+            getLeftHandler i
+                | i == 1 = (\gs -> if gameTotalRobotCount gs > 0 then gs { gameTotalRobotCount = gameTotalRobotCount gs - 1 } else gs)
+                | i == 0 = (\gs -> if gameSimulationSpeed gs > 0 then gs { gameSimulationSpeed = gameSimulationSpeed gs - 0.1 } else gs)
+                | i == -1 = changeDebugMode
+                | otherwise = id
+            getRightHandler :: Int -> (GameState -> GameState)
+            getRightHandler i
+                | i == 1 = (\gs -> if gameTotalRobotCount gs < 20 then gs { gameTotalRobotCount = gameTotalRobotCount gs + 1 } else gs)
+                | i == 0 = (\gs -> if gameSimulationSpeed gs < 10 then gs { gameSimulationSpeed = gameSimulationSpeed gs + 0.1 } else gs)
+                | i == -1 = changeDebugMode
+                | otherwise = id
+
+            changeDebugMode gs = gs { gameDebugInfo = not (gameDebugInfo gs) }
+    playButton = UIButton 
+        {
+            buttonPosition = (0, -0.7),
+            buttonSize     = (0.8, 0.2),
+            buttonText     = "Jugar",
+            buttonHandler  = (\gs -> gs { gameIsInMenu = False })
+        }

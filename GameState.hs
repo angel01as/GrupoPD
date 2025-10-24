@@ -8,6 +8,8 @@ import Entities
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Pure.Game
 import Geometry
+import UIButton
+import Data.Default
 
 -- Tipo de datos para representar el estado del juego
 data GameState = GameState
@@ -19,11 +21,39 @@ data GameState = GameState
     gameFrame :: Int, -- Frame actual del juego
     gameWindowSize :: (Int, Int),
     gameStageSize :: Size, -- Tamaño interno del escenario.
-    gameBackground :: Maybe Picture,
+    gameImages :: Map.Map String Picture,
     gameKeysPressed :: Set.Set Key,
+    gameTotalRobotCount :: Int,
     gameTotalProjectileCount :: Int,
     gameTotalExplosionCount :: Int,
     gameSimulationSpeed :: Scalar,
     gameDebugInfo :: Bool,
-    gamePaused :: Bool
+    gamePaused :: Bool,
+    gameButtons :: [UIButton GameState],
+    gameSeed :: Double,
+    gameIsInMenu :: Bool
   } deriving (Show, Eq)
+
+-- Estado por defecto.
+instance Default GameState where
+  def = GameState 
+    { 
+      gameWindowSize = (500,500),
+      gameRobots = Map.empty,
+      gameProjectiles = Map.empty,
+      gameTime = 0,
+      gameFrame = 0,
+      gameExplosions = Map.empty,
+      gameStageSize = (100, 50),
+      gameImages = Map.empty,
+      gameKeysPressed = Set.empty,
+      gameTotalRobotCount = 0,
+      gameTotalProjectileCount = 0,
+      gameTotalExplosionCount = 0,
+      gameSimulationSpeed = 1,
+      gameDebugInfo = False,
+      gamePaused = False,
+      gameButtons = [],
+      gameIsInMenu = True,
+      gameSeed = 0
+    }

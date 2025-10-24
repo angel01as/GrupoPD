@@ -22,7 +22,7 @@ module RandomUtils (
 --   robotID:      ID del robot (para que cada robot tenga una posición diferente con la misma semilla)
 --
 -- Retorna: Una tupla (x, y) con la posición aleatoria dentro del área de juego
-generatePositionFromSeed :: (Float, Float) -> Float -> Int -> (Float, Float)
+generatePositionFromSeed :: (Float, Float) -> Double -> Int -> (Float, Float)
 generatePositionFromSeed (maxX, maxY) seedBase robotID = (x * 0.8, y * 0.8)  -- Multiplicamos por 0.8 para usar solo 80% del área (evita spawns cerca de bordes)
   where
     -- Convertir la semilla Float a un Int grande (multiplicamos por 1 millón para tener más precisión)
@@ -51,7 +51,7 @@ generatePositionFromSeed (maxX, maxY) seedBase robotID = (x * 0.8, y * 0.8)  -- 
 --
 -- Retorna: Lista de tuplas (ID, (x, y)) con las posiciones generadas para cada robot
 
-generateAllRobotPositions :: (Float, Float) -> Float -> [Int] -> [(Int, (Float, Float))]
+generateAllRobotPositions :: (Float, Float) -> Double -> [Int] -> [(Int, (Float, Float))]
 generateAllRobotPositions bounds seedBase robotIDs = 
   [(robotID, generatePositionFromSeed bounds seedBase robotID) | robotID <- robotIDs]
 
