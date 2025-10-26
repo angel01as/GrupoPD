@@ -13,15 +13,22 @@ import Numeric (showFFloat)
 
 -- Rutas a imágenes
 backgroundImagePath = "images/background.jpg"
-robotBodyImagePath = "images/robot_body.png"
-robotTurretImagePath = "images/robot_turret.png"
+
+aggressiveBotBodyPath = "images/aggressiveBot/robot_body.png"
+defensiveBotBodyPath = "images/defensiveBot/robot_body.png"
+sniperBotBodyPath = "images/sniperBot/robot_body.png"
+
+aggressiveBotTurretPath = "images/aggressiveBot/robot_turret.png"
+defensiveBotTurretPath = "images/defensiveBot/robot_turret.png"
+sniperBotTurretPath = "images/sniperBot/robot_turret.png"
+
 projectileImagePath = "images/projectile.png"
 
 -- Sprites de explosión de proyectil
-explosionSprite1Path = "images/a.png"
-explosionSprite2Path = "images/aa.png"
-explosionSprite3Path = "images/aaa.png"
-explosionSprite4Path = "images/aaaa.png"
+explosionSprite1Path = "images/explosion/a.png"
+explosionSprite2Path = "images/explosion/aa.png"
+explosionSprite3Path = "images/explosion/aaa.png"
+explosionSprite4Path = "images/explosion/aaaa.png"
 
 -- Sprites de colisión tanque-tanque
 collisionSprite1Path = "images/ChoqueTanques/g.png"
@@ -34,7 +41,8 @@ robotDeathSprite2Path = "images/death_aa.png"
 robotDeathSprite3Path = "images/death_aaa.png"
 robotDeathSprite4Path = "images/death_aaaa.png"
 
-usedImages = [backgroundImagePath, robotBodyImagePath, robotTurretImagePath, projectileImagePath,
+usedImages = [backgroundImagePath, aggressiveBotBodyPath, defensiveBotBodyPath, sniperBotBodyPath,
+              aggressiveBotTurretPath, defensiveBotTurretPath, sniperBotTurretPath, projectileImagePath,
               explosionSprite1Path, explosionSprite2Path, explosionSprite3Path, explosionSprite4Path,
               collisionSprite1Path, collisionSprite2Path, collisionSprite3Path,
               robotDeathSprite1Path, robotDeathSprite2Path, robotDeathSprite3Path, robotDeathSprite4Path]
@@ -117,25 +125,41 @@ drawGame gs
         turretAngle = -radToDeg (turretOrientation (robotTurret r))
         
         -- Tanque (cuerpo del robot) - usando sprite
-        tankSprite = case Map.lookup robotBodyImagePath (gameImages gs) of
-          Just img -> img
-          Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+
+        tankSprite = case robotBehavior r of
+          "aggressive" -> case Map.lookup aggressiveBotBodyPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+          "defensive" -> case Map.lookup defensiveBotBodyPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+          "sniper" -> case Map.lookup sniperBotBodyPath (gameImages gs) of
+                          Just img -> img
+                          Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+
+        -- Cañón (torreta) - usando sprite
+        turretSprite = case robotBehavior r of
+          "aggressive" -> case Map.lookup aggressiveBotTurretPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+          "defensive" -> case Map.lookup defensiveBotTurretPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+          "sniper" -> case Map.lookup sniperBotTurretPath (gameImages gs) of
+                          Just img -> img
+                          Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+        
         
         tank = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
                Rotate robotOrientation $
                Scale (meter2Pixel gs sx / 100) (meter2Pixel gs sy / 100) $  -- Escalar para que coincida con el tamaño del robot
                (if isRobotAlive r then tankSprite else Color (greyN 0.5) tankSprite)
-        
-        -- Cañón (torreta) - usando sprite
-        turretSprite = case Map.lookup robotTurretImagePath (gameImages gs) of
-          Just img -> img
-          Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
-        
+
         turret = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
-                 Rotate turretAngle $
-                 Translate (meter2Pixel gs sx * 0.75) 0 $  -- Offset hacia adelante
-                 Scale (meter2Pixel gs sx / 80) (meter2Pixel gs sy / 120) $
-                 turretSprite
+                Rotate turretAngle $
+                Translate (meter2Pixel gs sx * 0.25) 0 $  -- Offset hacia adelante
+                Scale (meter2Pixel gs sx / 80) (meter2Pixel gs sy / 120) $
+                turretSprite
         
         -- Barra de salud
         healthBar = drawHealthBar r

@@ -604,4 +604,5 @@ getBehaviorByName "aggressive" = aggressiveBot
 getBehaviorByName "defensive" = defensiveBot
 getBehaviorByName "stupid" = stupidBot
 getBehaviorByName "turret" = turretBot
+getBehaviorByName "sniper" = sniperBot
 getBehaviorByName _ = aggressiveBot -- Comportamiento por defecto
