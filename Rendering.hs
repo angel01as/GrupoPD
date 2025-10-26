@@ -31,15 +31,15 @@ explosionSprite3Path = "images/explosion/aaa.png"
 explosionSprite4Path = "images/explosion/aaaa.png"
 
 -- Sprites de colisión tanque-tanque
-collisionSprite1Path = "images/ChoqueTanques/g.png"
-collisionSprite2Path = "images/ChoqueTanques/fff.png"
-collisionSprite3Path = "images/ChoqueTanques/eeee.png"
+collisionSprite1Path = "images/collisionEffect/collision_effect1.png"
+collisionSprite2Path = "images/collisionEffect/collision_effect2.png"
+collisionSprite3Path = "images/collisionEffect/collision_effect3.png"
 
 -- Sprites de muerte del robot
-robotDeathSprite1Path = "images/death_a.png"
-robotDeathSprite2Path = "images/death_aa.png"
-robotDeathSprite3Path = "images/death_aaa.png"
-robotDeathSprite4Path = "images/death_aaaa.png"
+robotDeathSprite1Path = "images/deathEffect/death_effect1.png"
+robotDeathSprite2Path = "images/deathEffect/death_effect2.png"
+robotDeathSprite3Path = "images/deathEffect/death_effect3.png"
+robotDeathSprite4Path = "images/deathEffect/death_effect4.png"
 
 usedImages = [backgroundImagePath, aggressiveBotBodyPath, defensiveBotBodyPath, sniperBotBodyPath,
               aggressiveBotTurretPath, defensiveBotTurretPath, sniperBotTurretPath, projectileImagePath,
