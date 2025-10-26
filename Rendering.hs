@@ -10,11 +10,12 @@ import UIButton
 import WindowSizeState
 
 import Numeric (showFFloat)
+import Graphics.Gloss.Juicy (loadJuicy)
 
 -- Rutas a imágenes
 backgroundImagePath = "images/background.jpg"
-robotImagePath = "" -- Cambiar
-projetileImagePath = "" -- Cambiar
+robotImagePath = "images/tankbody2.png" -- Cambiar
+projetileImagePath = "images/tankbullet2.png" -- Cambiar
 explosionImagePath = "" -- Cambiar
 
 usedImages = [backgroundImagePath, robotImagePath, projetileImagePath, explosionImagePath]
@@ -97,10 +98,10 @@ drawGame gs
         turretAngle = -radToDeg (turretOrientation (robotTurret r))
         
         -- Tanque (cuerpo del robot)
-        tank = Color (if isRobotAlive r then (makeColor 0.2 0.4 0.2 1.0) else (makeColor 0.5 0.5 0.5 1.0)) $
-               Translate (meter2Pixel gs x) (meter2Pixel gs y) $
-               Rotate robotOrientation $
-               rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+        tank = case Map.lookup robotImagePath (gameImages gs) of
+          Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Rotate robotOrientation img
+          Nothing  -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Rotate robotOrientation $
+                      Color (greyN 0.5) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
         
         -- Cañón (torreta)
         turretLength = meter2Pixel gs sx * 1.5  -- Cañón más largo

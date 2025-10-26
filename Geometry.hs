@@ -110,3 +110,10 @@ clampRange value (minV, maxV)
               | value > maxV = maxV
               | value < minV = minV
               | otherwise    = value
+
+
+polar2Comp :: Scalar -> Angle -> Scalar2D
+polar2Comp vec ang = (vec * cos ang, vec * sin ang)
+
+comp2Polar :: Scalar2D -> (Scalar, Angle)
+comp2Polar (x, y) = (sqrt (x**2+y**2),atan2 y x)
