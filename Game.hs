@@ -8,7 +8,7 @@ import Graphics.Gloss.Juicy
 
 import Geometry
 import Robot (Robot(..), Turret(..), isRobotAlive, createBasicRobot)
-import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), updateExplosion, isExplosionActive, isExplosionDamaging, createExplosion)
+import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), ExplosionType(..), updateExplosion, isExplosionActive, isExplosionDamaging, createExplosion, createCollisionExplosion)
 import qualified AI
 import GameState
 import RandomUtils (generatePositionFromSeed)
@@ -288,7 +288,19 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
         where
             -- Parámetro de daño, se puede cambiar para que, por ejemplo, considere la velocidad de choque.
             robotRobotDamage = 5
-            updatedGS = gs { gameRobots = adjustRobot r1 $ adjustRobot r2 (gameRobots gs)}
+            
+            -- Crear explosión de colisión en el punto medio
+            collisionPos = ((fst (robotPosition r1) + fst (robotPosition r2)) / 2,
+                           (snd (robotPosition r1) + snd (robotPosition r2)) / 2)
+            totalExplosionCount = gameTotalExplosionCount gs
+            newExplosionID = totalExplosionCount
+            collisionExplosion = createCollisionExplosion collisionPos 3.0 0 0.6 newExplosionID
+            
+            updatedGS = gs { 
+                gameRobots = adjustRobot r1 $ adjustRobot r2 (gameRobots gs),
+                gameExplosions = Map.insert newExplosionID collisionExplosion (gameExplosions gs),
+                gameTotalExplosionCount = totalExplosionCount + 1
+            }
                 where
                     -- Quita vida al Robot lo actualiza/elimina según proceda.
                     adjustRobot :: Robot -> Map.Map ID Robot -> Map.Map ID Robot

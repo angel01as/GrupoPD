@@ -2,8 +2,8 @@
 
 module Entities (
   -- Con tipo data(..) se exporta todo lo que tiene, constructor incluido.
-  GameEntity(..), Projectile(..), Explosion(..), ID,
-  createExplosion, updateExplosion, isExplosionActive, isExplosionDamaging
+  GameEntity(..), Projectile(..), Explosion(..), ExplosionType(..), ID,
+  createExplosion, createCollisionExplosion, updateExplosion, isExplosionActive, isExplosionDamaging
 ) where
 
 import Geometry (Size, Position, Scalar, Angle, Point, Velocity, add2D, prodByScalar, rotateVertices, translateVertices)
@@ -47,6 +47,9 @@ data Projectile = Proj
     projectileOwnerID :: ID -- ID del Robot que lo disparó.
   } deriving (Show, Eq)
 
+data ExplosionType = ProjectileExplosion | CollisionExplosion
+  deriving (Show, Eq)
+
 data Explosion = Expl
   {
     explosionID :: ID,
@@ -56,7 +59,8 @@ data Explosion = Expl
     explosionDamage :: Scalar,
     explosionTime :: Scalar,
     explosionMaxTime :: Scalar,
-    explosionVertices :: [Point]
+    explosionVertices :: [Point],
+    explosionType :: ExplosionType
   } deriving (Show, Eq)
 
 instance GameEntity Projectile where
@@ -86,7 +90,23 @@ createExplosion pos maxRadius damage maxTime newID = Expl
     explosionTime = 0,
     explosionMaxTime = maxTime,
     explosionID = newID,
-    explosionVertices = generateExplosionVertices pos 0
+    explosionVertices = generateExplosionVertices pos 0,
+    explosionType = ProjectileExplosion
+  }
+
+-- Crea una explosión de colisión tanque-tanque
+createCollisionExplosion :: Position -> Scalar -> Scalar -> Scalar -> ID -> Explosion
+createCollisionExplosion pos maxRadius damage maxTime newID = Expl
+  { 
+    explosionPosition = pos,
+    explosionRadius = 0,
+    explosionMaxRadius = maxRadius,
+    explosionDamage = damage,
+    explosionTime = 0,
+    explosionMaxTime = maxTime,
+    explosionID = newID,
+    explosionVertices = generateExplosionVertices pos 0,
+    explosionType = CollisionExplosion
   }
 
 -- Genera vértices para una explosión circular

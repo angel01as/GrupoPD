@@ -16,7 +16,7 @@ module AI (
   -- Ejecutor de comandos
   executeAICommands, updateRobotAI,
   -- Comportamientos de ejemplo
-  aggressiveBot, defensiveBot, exampleBot
+  aggressiveBot, defensiveBot, exampleBot, sniperBot
 ) where
 
 import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, canShoot, shootProjectile, afterShooting, updateTurretCooldown, multiplyMovementAction, getMovementActionValue)
@@ -228,57 +228,175 @@ decideInstruction (Sequence instructions) gs robot =  -- Se vuelve a llamar porq
 -- COMPORTAMIENTOS DE EJEMPLO
 -- ============================================================================
 
--- Bot agresivo que busca enemigos y los ataca
+-- Bot agresivo que busca enemigos y los ataca de frente
 aggressiveBot :: BotBehavior
 aggressiveBot gs robot =
-  ifThenElse hasTarget
+  ifThenElse isNearMapEdgeCondition
+    -- PRIORIDAD 1: Evitar bordes del mapa
     (sequence [
-      -- Si tiene objetivo, apuntar y disparar
-      setMemory "mode" (StringValue "attacking"),
-      ifThenElse (BoolCondition (abs(angleDifToTarget) > 5e-1)) (rotateTurret angleDifToTarget) (Simple ClearBlockCommand),
-      -- Evitar bordes del mapa
-      ifThen isNearMapEdgeCondition (rotate (pi/2)),
-      ifThen (And hasTarget (Not (isLowEnergy 10))) shoot,  -- Solo disparar si el objetivo sigue vivo y tenemos energía
-      move 1.0
-    ])
-    (sequence [
-      -- Si no tiene objetivo, buscar
-      setMemory "mode" (StringValue "searching"),
-      rotate (pi/4),  -- Girar 45 grados
-      -- Evitar bordes del mapa
-      ifThen isNearMapEdgeCondition (rotate (pi/2)),
-      move 0.5,
-      wait 0.1
-    ])
-    where angleDifToTarget = (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot))
-
--- Bot defensivo que evita enemigos cuando tiene poca energía
-defensiveBot :: BotBehavior
-defensiveBot gs robot =
-  ifThenElse (isLowEnergy 30)
-    (sequence [
-      -- Si tiene poca energía, huir pero sin salirse del mapa
-      setMemory "mode" (StringValue "fleeing"),
-      ifThen isNearMapEdgeCondition (rotate (pi/2)),  -- Si está cerca del borde, girar
-      moveBackward 1.0,  -- Moverse hacia atrás más despacio
-      wait 0.5
+      setMemory "mode" (StringValue "avoiding_edge"),
+      rotate (pi/2),  -- Girar 90 grados
+      wait 0.3
     ])
     (ifThenElse hasTarget
+      -- PRIORIDAD 2: Si detecta enemigo, atacar
+      (let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
+           targetPos = position enemy
+           distToEnemy = distanceBetween (position robot) targetPos
+           targetAngle = angleToTarget (position robot) targetPos
+           turretAngle = turretOrientation (robotTurret robot)
+           angleDiff = normalizeAngle (targetAngle - turretAngle)
+           turretAligned = abs angleDiff < 0.15  -- Tolerancia de ~8.6 grados
+       in sequence [
+         setMemory "mode" (StringValue "attacking"),
+         
+         -- Rotar torreta hacia el enemigo
+         ifThenElse (BoolCondition (not turretAligned))
+           (rotateTurret angleDiff)
+           (Simple ClearBlockCommand),
+         
+         -- Movimiento según distancia
+         ifThenElse (BoolCondition (distToEnemy > 15))
+           (move 0.8)  -- Avanzar si está lejos
+           (ifThenElse (BoolCondition (distToEnemy < 8))
+             (moveBackward 0.5)  -- Retroceder si está muy cerca
+             (Simple DoNothingCommand)),  -- Mantener posición en distancia media
+         
+         -- Disparar solo si la torreta está alineada y tiene energía
+         ifThen (And (BoolCondition turretAligned) (Not (isLowEnergy 15))) shoot,
+         wait 0.1
+       ])
+      -- PRIORIDAD 3: Patrullar si no hay enemigos
       (sequence [
-        -- Si tiene objetivo y energía suficiente, atacar
-        setMemory "mode" (StringValue "attacking"),
-        rotateTurret (angleToTarget (position robot) (position (fromMaybe robot (findNearestEnemy robot (gameRobots gs)))) - turretOrientation (robotTurret robot)),
-        ifThen (And hasTarget (Not (isLowEnergy 10))) shoot  -- Solo disparar si el objetivo sigue vivo
-      ])
-      (sequence [
-        -- Patrullar
         setMemory "mode" (StringValue "patrolling"),
-        ifThen isNearMapEdgeCondition (rotate (pi/2)),  -- Si está cerca del borde, girar
-        move 0.5,  -- Moverse más despacio
-        rotate (pi/8),
+        move 0.5,
+        rotate (pi/16),  -- Girar lentamente
         wait 0.2
       ])
     )
+
+-- Bot francotirador que mantiene distancia y dispara con precisión
+sniperBot :: BotBehavior
+sniperBot gs robot =
+  ifThenElse isNearMapEdgeCondition
+    -- PRIORIDAD 1: Evitar bordes
+    (sequence [
+      setMemory "mode" (StringValue "avoiding_edge"),
+      rotate (pi/2),
+      wait 0.3
+    ])
+    (ifThenElse hasTarget
+      -- PRIORIDAD 2: Si detecta enemigo, mantener distancia óptima
+      (let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
+           targetPos = position enemy
+           distToEnemy = distanceBetween (position robot) targetPos
+           targetAngle = angleToTarget (position robot) targetPos
+           turretAngle = turretOrientation (robotTurret robot)
+           angleDiff = normalizeAngle (targetAngle - turretAngle)
+           turretAligned = abs angleDiff < 0.1  -- Más precisión que agresivo
+           optimalDistance = 30  -- Distancia óptima de francotirador
+       in sequence [
+         setMemory "mode" (StringValue "sniping"),
+         
+         -- SIEMPRE rotar torreta hacia enemigo (no rotar el cuerpo)
+         rotateTurret angleDiff,
+         
+         -- Ajustar distancia sin perder la orientación
+         ifThenElse (BoolCondition (distToEnemy > optimalDistance + 5))
+           (move 0.3)  -- Avanzar lentamente si está demasiado lejos
+           (ifThenElse (BoolCondition (distToEnemy < optimalDistance - 5))
+             (moveBackward 0.4)  -- Retroceder si está muy cerca
+             (Simple DoNothingCommand)),  -- Mantener posición óptima
+         
+         -- Disparar solo si está perfectamente alineado y en rango
+         ifThen (And (BoolCondition turretAligned) 
+                     (And (BoolCondition (distToEnemy <= turretRange (robotTurret robot))) 
+                          (Not (isLowEnergy 20)))) 
+                shoot,
+         
+         wait 0.2  -- Pausas más largas entre acciones
+       ])
+      -- PRIORIDAD 3: Buscar enemigos sin moverse mucho
+      (sequence [
+        setMemory "mode" (StringValue "searching"),
+        rotate (pi/8),  -- Girar lentamente buscando
+        wait 0.5  -- Esperar más tiempo
+      ])
+    )
+
+-- Bot defensivo que se protege y calcula sus movimientos
+defensiveBot :: BotBehavior
+defensiveBot gs robot =
+  ifThenElse isNearMapEdgeCondition
+    -- PRIORIDAD 1: Evitar bordes
+    (sequence [
+      setMemory "mode" (StringValue "avoiding_edge"),
+      rotate (pi/2),
+      wait 0.3
+    ])
+    (ifThenElse (isLowEnergy 40)
+      -- PRIORIDAD 2: Si tiene poca energía, huir
+      (sequence [
+        setMemory "mode" (StringValue "fleeing"),
+        ifThenElse hasTarget
+          (let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
+               targetPos = position enemy
+               targetAngle = angleToTarget (position robot) targetPos
+               -- Ángulo opuesto para huir
+               escapeAngle = normalizeAngle (targetAngle + pi)
+               robotAngle = orientation robot
+               turnDiff = normalizeAngle (escapeAngle - robotAngle)
+           in sequence [
+             rotate (turnDiff * 0.5),  -- Girar para alejarse
+             move 0.7,  -- Moverse rápido
+             wait 0.2
+           ])
+          (sequence [
+            move 0.4,
+            rotate (pi/6),
+            wait 0.3
+          ])
+      ])
+      -- PRIORIDAD 3: Si tiene energía, defender
+      (ifThenElse hasTarget
+        (let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
+             targetPos = position enemy
+             distToEnemy = distanceBetween (position robot) targetPos
+             targetAngle = angleToTarget (position robot) targetPos
+             turretAngle = turretOrientation (robotTurret robot)
+             angleDiff = normalizeAngle (targetAngle - turretAngle)
+             turretAligned = abs angleDiff < 0.15
+             safeDistance = 12  -- Distancia de seguridad
+         in sequence [
+           setMemory "mode" (StringValue "defending"),
+           
+           -- Rotar torreta hacia enemigo
+           rotateTurret angleDiff,
+           
+           -- Mantener distancia de seguridad
+           ifThenElse (BoolCondition (distToEnemy < safeDistance))
+             (moveBackward 0.5)  -- Alejarse si está muy cerca
+             (ifThenElse (BoolCondition (distToEnemy > safeDistance + 10))
+               (move 0.4)  -- Acercarse si está muy lejos
+               (Simple DoNothingCommand)),  -- Mantener posición
+           
+           -- Disparar si está alineado
+           ifThen (And (BoolCondition turretAligned) (Not (isLowEnergy 15))) shoot,
+           wait 0.2
+         ])
+        -- PRIORIDAD 4: Patrullar con cautela
+        (sequence [
+          setMemory "mode" (StringValue "patrolling"),
+          move 0.3,
+          rotate (pi/12),
+          wait 0.4
+        ])
+      )
+    )
+
+-- Normaliza un ángulo al rango [-pi, pi]
+normalizeAngle :: Angle -> Angle
+normalizeAngle angle = angle - 2 * pi * fromIntegral (round (angle / (2 * pi)) :: Int)
 
 turretBot :: BotBehavior
 turretBot gs robot = sequence [
