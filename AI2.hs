@@ -10,6 +10,8 @@ import Prelude
 import GameState
 import Debug.Trace
 
+-- Reescritura del modulo AI debido a la complejidad a la hora de arreglar errores (por ahora se sigue usando AI.hs)
+
 -- ============================================================================
 -- DSL PARA ACCIONES DEL BOT
 -- ============================================================================
