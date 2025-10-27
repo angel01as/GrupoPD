@@ -31,7 +31,8 @@ data GameState = GameState
     gamePaused :: Bool,
     gameButtons :: [UIButton GameState],
     gameSeed :: Double,
-    gameIsInMenu :: Bool
+    gameIsInMenu :: Bool,
+    gameCollisionCooldown :: Scalar
   } deriving (Show, Eq)
 
 -- Estado por defecto.
@@ -55,5 +56,6 @@ instance Default GameState where
       gamePaused = False,
       gameButtons = [],
       gameIsInMenu = True,
-      gameSeed = 0
+      gameSeed = 0,
+      gameCollisionCooldown = 0
     }

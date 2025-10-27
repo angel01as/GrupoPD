@@ -8,7 +8,7 @@ import Graphics.Gloss.Juicy
 
 import Geometry
 import Robot (Robot(..), Turret(..), isRobotAlive, createBasicRobot)
-import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), updateExplosion, isExplosionActive, isExplosionDamaging, createExplosion)
+import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), ExplosionType(..), updateExplosion, isExplosionActive, isExplosionDamaging, createExplosion, createCollisionExplosion)
 import qualified AI
 import GameState
 import RandomUtils (generatePositionFromSeed)
@@ -78,8 +78,8 @@ tryHandleMouse event state
 --
 -- Retorna: Un nuevo estado de juego con robots reposicionados aleatoriamente
 regenerateRobotsWithRandomPositions :: GameState -> GameState -> GameState
-regenerateRobotsWithRandomPositions currentState initialState = 
-  initialState { 
+regenerateRobotsWithRandomPositions currentState initialState =
+  initialState {
     gameRobots = newRobots,
     gameSimulationSpeed = gameSimulationSpeed currentState,
     gameDebugInfo = gameDebugInfo currentState,
@@ -91,17 +91,17 @@ regenerateRobotsWithRandomPositions currentState initialState =
     -- Por ejemplo, si han pasado 45.7 segundos, seedBase = 45.7
     -- Esto garantiza que cada reset tenga posiciones diferentes
     seedBase = gameSeed currentState
-    
+
     stageSize = gameStageSize initialState  -- Tamaño del escenario (ej: 100x70)
-    
+
     -- Calcular los límites (bounds) del área jugable
     -- bounds = (mitad del ancho, mitad del alto) → si stageSize = (100, 70), entonces bounds = (50, 35)
     bounds = (fst stageSize / 2, snd stageSize / 2)
-    
+
     -- Obtener los IDs y comportamientos de los robots originales
     originalRobots = Map.elems (gameRobots initialState)
     robotInfos = [(robotID r, robotBehavior r) | r <- originalRobots]
-    
+
     -- Generar nuevos robots con posiciones aleatorias pero manteniendo sus IDs y comportamientos
     -- Para cada robot, generamos una nueva posición usando bounds, seedBase y su ID
     newRobots = Map.fromList [
@@ -139,14 +139,14 @@ playGame initialState = play window backgroundColor fps initialState drawGame (h
               | Set.member (Char '9') keys = gs { gameSimulationSpeed = 2.5 }
               | Set.member (Char '0') keys = gs { gameSimulationSpeed = 3.0 }
               | otherwise = gs
-            
+
             gameInMenu
               | Set.member (SpecialKey KeySpace) keys || Set.member (SpecialKey KeyEnter) keys = gs { gameIsInMenu = False, gameKeysPressed = Set.delete (SpecialKey KeySpace) keys }
               | otherwise = gs
 
 -- === ACTUALIZACIÓN ===
 updateGame :: Float -> GameState -> GameState
-updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + deltaTime, gameFrame = gameFrame oldState + 1 }
+updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + deltaTime, gameFrame = gameFrame oldState + 1, gameCollisionCooldown = newCollisionCooldown }
   where
     deltaTime = trueDeltaTime * gameSimulationSpeed oldState
     -- Ejecutar física
@@ -171,9 +171,9 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                 | not correctToBounds || all ((flip isInBounds) (gameStageSize oldState)) (vertices candidateEntity) = candidateEntity
                 | otherwise = correctedEntity
             -- Si no todos los vértices están dentro del escenario hay que corregirlo.
-            correctedEntity = 
+            correctedEntity =
                 foldr
-                (\(correctCondition, correctionFunction) ent -> if correctCondition then correctionFunction ent else ent) 
+                (\(correctCondition, correctionFunction) ent -> if correctCondition then correctionFunction ent else ent)
                 candidateEntity
                 [(left, correctedLeft), (right, correctedRight), (top, correctedTop), (bottom, correctedBottom)]
                 where
@@ -190,7 +190,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                     bottom = minY < -height / 2
                     -- Velocidad anterior. Ponemos a 0 la componente que ha provocado la salida.
                     (vx, vy) = velocity candidateEntity
-                    
+
                     correctedLeft :: GameEntity b => b -> b
                     correctedLeft ent = correctedGeneral (-width / 2 - minX, 0) (setVelocity ent (0, 0))
                     correctedRight :: GameEntity b => b -> b
@@ -199,19 +199,19 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                     correctedTop ent = correctedGeneral (0, height / 2 - maxY) (setVelocity ent (0, 0))
                     correctedBottom :: GameEntity b => b -> b
                     correctedBottom ent = correctedGeneral (0, -height / 2 - minY) (setVelocity ent (0, 0))
-                    
+
                     -- Traslada el objeto según la corrección.
                     correctedGeneral :: GameEntity b => Vector -> b -> b
                     correctedGeneral translation ent = setVertices (setPosition ent newPos) translatedVerts
-                        where 
+                        where
                         newPos = add2D (position ent) translation
                         translatedVerts = translateVertices (vertices ent) translation
     -- FIN DE APLICACIÓN DE FÍSICAS
-    
+
     -- COLISIONES
     -- Se recuerda que los tipos son (Projectile, Robot) y (Robot, Robot)
     (robotProjectileCollisions, robotRobotCollisions) = checkCollisions (Map.elems $ gameRobots phisicsState) (Map.elems $ gameProjectiles phisicsState)
-    
+
     -- Parámetros para nueva explosiones
     maxTime = 1
     maxRadius = 5
@@ -223,14 +223,14 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
     applyExplosions (explosion:xs) gs = applyExplosions xs (applyExplosion gs)
         where
             applyExplosion :: GameState -> GameState
-            applyExplosion state = 
-                applyExplosionToProjectiles (Map.elems $  gameProjectiles state) $ 
+            applyExplosion state =
+                applyExplosionToProjectiles (Map.elems $  gameProjectiles state) $
                 applyExplosionToRobots (Map.elems $ gameRobots state) state
                 where
                     -- Comprueba si la explosión alcanza a la entidad.
                     checkExplosionGameEntity :: GameEntity a => a -> Bool
                     checkExplosionGameEntity = (checkCollision (explosionVertices explosion)).vertices
-                    
+
                     applyExplosionToRobots :: [Robot] -> GameState -> GameState
                     applyExplosionToRobots [] gs' = gs'
                     applyExplosionToRobots (r:rs) gs'
@@ -238,7 +238,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                         | isRobotAlive updatedRobot = applyExplosionToRobots rs (gs' { gameRobots = Map.insert (robotID updatedRobot) updatedRobot (gameRobots gs') })
                         | otherwise = applyExplosionToRobots rs (gs' { gameRobots = Map.delete (robotID updatedRobot) (gameRobots gs')})
                         where updatedRobot = r { robotEnergy = (robotEnergy r - deltaTime * explosionDamage explosion) }
-                    
+
                     applyExplosionToProjectiles :: [Projectile] -> GameState -> GameState
                     applyExplosionToProjectiles [] gs' = gs'
                     applyExplosionToProjectiles (p:ps) gs'
@@ -247,7 +247,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                         where
                             totalExplosionCount = gameTotalExplosionCount gs'
                             -- Si colisiona con un proyectil, se destruye y se genera una nueva explosión.
-                            updatedGS = gs' { 
+                            updatedGS = gs' {
                                                 gameProjectiles = Map.delete (projectileID p) (gameProjectiles gs'),
                                                 gameExplosions = Map.insert newID newExpl (gameExplosions gs'),
                                                 gameTotalExplosionCount = totalExplosionCount + 1
@@ -264,7 +264,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
             -- Dañamos al Robot, destruimos el proyectil y generamos una explosión.
             updatedGS = if projectileOwnerID p == robotID r
                 then gs
-                else gs { 
+                else gs {
                             gameRobots = updatedRobots,
                             gameProjectiles = Map.delete (projectileID p) (gameProjectiles gs),
                             gameExplosions = Map.insert newID newExpl (gameExplosions gs),
@@ -280,7 +280,10 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                             updatedR = r { robotEnergy = (robotEnergy r - projectileDamage p) }
                     newID = totalExplosionCount
                     newExpl = createExplosion (position p) maxRadius explDamage maxTime newID
-
+    -- Gestiona cooldown de generación de colisiones
+    newCollisionCooldown = if gameCollisionCooldown oldState > 0
+      then max 0 (gameCollisionCooldown oldState - deltaTime)
+      else 1
     -- Gestiona colisiones entre Robot y Robot, dañando a ambos por igual.
     applyRobotRobotCollisions :: [RobotRobotCollisionEvent] -> GameState -> GameState
     applyRobotRobotCollisions [] gs = gs
@@ -288,7 +291,23 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
         where
             -- Parámetro de daño, se puede cambiar para que, por ejemplo, considere la velocidad de choque.
             robotRobotDamage = 5
-            updatedGS = gs { gameRobots = adjustRobot r1 $ adjustRobot r2 (gameRobots gs)}
+
+            -- Crear explosión de colisión en el punto medio
+            collisionPos = ((fst (robotPosition r1) + fst (robotPosition r2)) / 2,
+                           (snd (robotPosition r1) + snd (robotPosition r2)) / 2)
+            totalExplosionCount = gameTotalExplosionCount gs
+            newExplosionID = totalExplosionCount
+            collisionExplosion = if newCollisionCooldown == 0
+              then Just (createCollisionExplosion collisionPos 3.0 0 0.6 newExplosionID)
+              else Nothing
+
+            updatedGS = gs {
+                gameRobots = adjustRobot r1 $ adjustRobot r2 (gameRobots gs),
+                gameExplosions = case collisionExplosion of
+                  Just explosion -> Map.insert newExplosionID explosion (gameExplosions gs)
+                  Nothing -> gameExplosions gs,
+                gameTotalExplosionCount = totalExplosionCount + 1
+            }
                 where
                     -- Quita vida al Robot lo actualiza/elimina según proceda.
                     adjustRobot :: Robot -> Map.Map ID Robot -> Map.Map ID Robot
@@ -297,9 +316,9 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
                         | otherwise = Map.delete (robotID r) robots
                         where
                             -- Se puede mejorar, por ejemplo, reduciendo la velocidad.
-                            updatedR = r { robotEnergy = (robotEnergy r - robotRobotDamage * deltaTime) } 
+                            updatedR = r { robotEnergy = (robotEnergy r - robotRobotDamage * deltaTime) }
     -- Aplicamos todas las colisiones y explosiones
-    collisionState = 
+    collisionState =
         applyRobotRobotCollisions robotRobotCollisions $
         applyRobotProjectileCollisions robotProjectileCollisions $
         applyExplosions (Map.elems $ gameExplosions phisicsState) phisicsState
@@ -311,7 +330,7 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
     aiResults = fmap (\r -> AI.updateRobotAI r collisionState deltaTime) (gameRobots collisionState)
     updatedRobots = fmap AI.updatedRobot aiResults
     spawnedProjectiles = concatMap AI.newProjectiles aiResults
-    
+
     insertSpawnedProjectiles :: ID -> Map.Map ID Projectile -> [Projectile] -> Map.Map ID Projectile
     insertSpawnedProjectiles nextID m [] = m
     insertSpawnedProjectiles nextID m (p:ps) = insertSpawnedProjectiles (nextID + 1) newM ps
@@ -322,8 +341,8 @@ updateGame trueDeltaTime oldState = finalState { gameTime = gameTime oldState + 
     allProjectiles = insertSpawnedProjectiles totalProjectileCount (gameProjectiles collisionState) spawnedProjectiles
     -- FIN DE IA --
 
-    finalState = collisionState 
-      { 
-        gameRobots = updatedRobots, gameProjectiles = allProjectiles, 
+    finalState = collisionState
+      {
+        gameRobots = updatedRobots, gameProjectiles = allProjectiles,
         gameTotalProjectileCount = totalProjectileCount + length spawnedProjectiles
       }

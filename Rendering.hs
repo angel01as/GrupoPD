@@ -14,11 +14,39 @@ import Graphics.Gloss.Juicy (loadJuicy)
 
 -- Rutas a imágenes
 backgroundImagePath = "images/background.jpg"
-robotImagePath = "images/tankbody2.png" -- Cambiar
-projetileImagePath = "images/tankbullet2.png" -- Cambiar
-explosionImagePath = "" -- Cambiar
 
-usedImages = [backgroundImagePath, robotImagePath, projetileImagePath, explosionImagePath]
+aggressiveBotBodyPath = "images/aggressiveBot/robot_body.png"
+defensiveBotBodyPath = "images/defensiveBot/robot_body.png"
+sniperBotBodyPath = "images/sniperBot/robot_body.png"
+
+aggressiveBotTurretPath = "images/aggressiveBot/robot_turret.png"
+defensiveBotTurretPath = "images/defensiveBot/robot_turret.png"
+sniperBotTurretPath = "images/sniperBot/robot_turret.png"
+
+projectileImagePath = "images/projectile.png"
+
+-- Sprites de explosión de proyectil
+explosionSprite1Path = "images/explosion/a.png"
+explosionSprite2Path = "images/explosion/aa.png"
+explosionSprite3Path = "images/explosion/aaa.png"
+explosionSprite4Path = "images/explosion/aaaa.png"
+
+-- Sprites de colisión tanque-tanque
+collisionSprite1Path = "images/collisionEffect/collision_effect1.png"
+collisionSprite2Path = "images/collisionEffect/collision_effect2.png"
+collisionSprite3Path = "images/collisionEffect/collision_effect3.png"
+
+-- Sprites de muerte del robot
+robotDeathSprite1Path = "images/deathEffect/death_effect1.png"
+robotDeathSprite2Path = "images/deathEffect/death_effect2.png"
+robotDeathSprite3Path = "images/deathEffect/death_effect3.png"
+robotDeathSprite4Path = "images/deathEffect/death_effect4.png"
+
+usedImages = [backgroundImagePath, aggressiveBotBodyPath, defensiveBotBodyPath, sniperBotBodyPath,
+              aggressiveBotTurretPath, defensiveBotTurretPath, sniperBotTurretPath, projectileImagePath,
+              explosionSprite1Path, explosionSprite2Path, explosionSprite3Path, explosionSprite4Path,
+              collisionSprite1Path, collisionSprite2Path, collisionSprite3Path,
+              robotDeathSprite1Path, robotDeathSprite2Path, robotDeathSprite3Path, robotDeathSprite4Path]
 
 -- gmap es un fmap sobre un Map que devuelve el resultado como lista.
 gmap :: (Ord k) => (v -> w) -> Map.Map k v -> [w]
@@ -97,20 +125,42 @@ drawGame gs
         robotOrientation = -radToDeg (orientation r) -- Gloss usa rotación en sentido horario expresada en grados y nosotros rotación antihoraria expresada en radianes.
         turretAngle = -radToDeg (turretOrientation (robotTurret r))
         
-        -- Tanque (cuerpo del robot)
-        tank = case Map.lookup robotImagePath (gameImages gs) of
-          Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Rotate robotOrientation img
-          Nothing  -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Rotate robotOrientation $
-                      Color (greyN 0.5) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+        -- Tanque (cuerpo del robot) - usando sprite
+
+        tankSprite = case robotBehavior r of
+          "aggressive" -> case Map.lookup aggressiveBotBodyPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+          "defensive" -> case Map.lookup defensiveBotBodyPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+          "sniper" -> case Map.lookup sniperBotBodyPath (gameImages gs) of
+                          Just img -> img
+                          Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+
+        -- Cañón (torreta) - usando sprite
+        turretSprite = case robotBehavior r of
+          "aggressive" -> case Map.lookup aggressiveBotTurretPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+          "defensive" -> case Map.lookup defensiveBotTurretPath (gameImages gs) of
+                              Just img -> img
+                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+          "sniper" -> case Map.lookup sniperBotTurretPath (gameImages gs) of
+                          Just img -> img
+                          Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
         
-        -- Cañón (torreta)
-        turretLength = meter2Pixel gs sx * 1.5  -- Cañón más largo
-        turretWidth = meter2Pixel gs sy * 0.3   -- Ancho más grueso
-        turret = Color (makeColor 0.1 0.2 0.1 1.0) $
-                 Translate (meter2Pixel gs x) (meter2Pixel gs y) $
-                 Rotate turretAngle $
-                 Translate (turretLength/4) 0 $
-                 rectangleSolid (turretLength/2) (turretWidth/2)
+        
+        tank = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
+               Rotate robotOrientation $
+               Scale (meter2Pixel gs sx / 100) (meter2Pixel gs sy / 100) $  -- Escalar para que coincida con el tamaño del robot
+               (if isRobotAlive r then tankSprite else Color (greyN 0.5) tankSprite)
+
+        turret = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
+                Rotate turretAngle $
+                Translate (meter2Pixel gs sx * 0.25) 0 $  -- Offset hacia adelante
+                Scale (meter2Pixel gs sx / 80) (meter2Pixel gs sy / 120) $
+                turretSprite
         
         -- Barra de salud
         healthBar = drawHealthBar r
@@ -140,16 +190,43 @@ drawGame gs
                  Translate (meter2Pixel gs x - barWidth/4 + (barWidth/2 * healthPercent)/2) barY $
                  rectangleSolid (barWidth/2 * healthPercent) (barHeight/2)
 
-    -- Renderiza un proyectil (círculo)
+    -- Renderiza un proyectil
     drawProjectile :: Projectile -> Picture
-    drawProjectile p = Color orange $ 
-      uncurry Translate (toPx (position p)) $ -- uncurry convierte tupla (x,y) en argumentos separados para Translate
-      circleSolid (meter2Pixel gs 0.5) -- Radio de 0.5 metros
+    drawProjectile p = 
+      let (x, y) = position p
+          angle = -radToDeg (projectileOrientation p)
+          projectileSprite = case Map.lookup projectileImagePath (gameImages gs) of
+            Just img -> Scale 0.5 0.5 img
+            Nothing -> Color orange $ circleSolid (meter2Pixel gs 0.5)
+      in Translate (meter2Pixel gs x) (meter2Pixel gs y) $ 
+         Rotate angle $
+         projectileSprite
 
     drawExplosion :: Explosion -> Picture
-    drawExplosion e = Color (withAlpha 0.7 red) $ 
-        uncurry Translate (toPx (explosionPosition e)) $ 
-        circleSolid (meter2Pixel gs (explosionRadius e))
+    drawExplosion e = 
+        let (x, y) = explosionPosition e
+            progress = explosionTime e / explosionMaxTime e
+            
+            -- Seleccionar sprite según el tipo y progreso de la animación
+            spritePath = case explosionType e of
+              ProjectileExplosion -> 
+                if progress < 0.25 then explosionSprite1Path
+                else if progress < 0.5 then explosionSprite2Path
+                else if progress < 0.75 then explosionSprite3Path
+                else explosionSprite4Path
+              CollisionExplosion ->
+                if progress < 0.33 then collisionSprite1Path
+                else if progress < 0.66 then collisionSprite2Path
+                else collisionSprite3Path
+            
+            explosionRadiusPx = meter2Pixel gs (explosionRadius e)
+            
+            -- Usar sprite si está disponible, sino círculo rojo
+            explosionPic = case Map.lookup spritePath (gameImages gs) of
+              Just img -> Scale (explosionRadiusPx / 50) (explosionRadiusPx / 50) img
+              Nothing -> Color (withAlpha 0.7 red) $ circleSolid explosionRadiusPx
+            
+        in Translate (meter2Pixel gs x) (meter2Pixel gs y) explosionPic
 
     -- Renderiza la interfaz de usuario
     drawUI :: GameState -> Picture

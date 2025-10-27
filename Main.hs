@@ -14,6 +14,18 @@ import Rendering(usedImages)
 import Data.Default
 import UIButton
 
+-- Lista de comportamientos disponibles en orden cíclico
+-- Si hay 1 bot: aggressive
+-- Si hay 2 bots: aggressive, aggressive
+-- Si hay 3 bots: aggressive, defensive, sniper
+-- Si hay 4+ bots: se repite el ciclo
+availableBehaviors :: [String]
+availableBehaviors = ["aggressive", "defensive", "sniper"]
+
+-- Asigna comportamiento basado en el índice del robot
+getBehaviorForIndex :: Int -> String
+getBehaviorForIndex idx = availableBehaviors !! (idx `mod` length availableBehaviors)
+
 -- Punto de entrada al juego.
 
 main :: IO()
@@ -37,11 +49,12 @@ main = do
     let pos2 = generatePositionFromSeed bounds seedBase 2  -- Posición para robot ID 2
     let pos3 = generatePositionFromSeed bounds seedBase 3  -- Posición para robot ID 3
     
+    -- Robots iniciales con comportamientos variados
     let robots = Map.fromList
             [ 
-                (1, createBasicRobot pos1 "aggressive" 1),
-                (2, createBasicRobot pos2 "defensive" 2),
-                (3, createBasicRobot pos3 "stupid" 3)
+                (1, createBasicRobot pos1 (getBehaviorForIndex 0) 1),  -- aggressive
+                (2, createBasicRobot pos2 (getBehaviorForIndex 1) 2),  -- defensive
+                (3, createBasicRobot pos3 (getBehaviorForIndex 2) 3)   -- sniper
             ]
     imagesMap <- loadImages usedImages
     let initialState = def 
@@ -51,7 +64,8 @@ main = do
                                 gameStageSize = (100, 70),
                                 gameImages = imagesMap,
                                 gameSeed = seedBase,
-                                gameButtons = makeButtons
+                                gameButtons = makeButtons,
+                                gameTotalRobotCount = 3  -- Iniciar con 3 robots por defecto
                             }
     playGame initialState
 
@@ -112,5 +126,23 @@ makeButtons =
             buttonPosition = (0, -0.7),
             buttonSize     = (0.8, 0.2),
             buttonText     = "Jugar",
-            buttonHandler  = (\gs -> gs { gameIsInMenu = False })
+            buttonHandler  = startGame
         }
+    
+    -- Función que inicia el juego generando robots según gameTotalRobotCount
+    startGame :: GameState -> GameState
+    startGame gs = 
+        let robotCount = gameTotalRobotCount gs
+            seedBase = gameSeed gs
+            stageSize = gameStageSize gs
+            bounds = (fst stageSize / 2, snd stageSize / 2)
+            
+            -- Generar lista de robots con comportamientos asignados
+            newRobots = Map.fromList [
+                (rid, createBasicRobot 
+                    (generatePositionFromSeed bounds seedBase rid) 
+                    (getBehaviorForIndex (rid - 1))  -- rid empieza en 1, índice en 0
+                    rid)
+                | rid <- [1..robotCount]
+              ]
+        in gs { gameIsInMenu = False, gameRobots = newRobots }

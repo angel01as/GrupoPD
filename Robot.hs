@@ -16,7 +16,9 @@ module Robot (
   afterShooting,
   createBasicRobot,
   multiplyMovementAction,
-  getMovementActionValue
+  getMovementActionValue,
+  rotateTurretTowards,
+  setTurretAngle
 ) where
 
 import Entities
@@ -183,3 +185,18 @@ createBasicRobot pos behaviorName newID = Rob
   , robotCurrentInstruction = Nothing,
     robotID = newID
   }
+
+-- ============================================================================
+-- FUNCIONES PARA CONTROLAR LA TORRETA
+-- ============================================================================
+
+-- Establece el ángulo de la torreta directamente
+setTurretAngle :: Robot -> Angle -> Robot
+setTurretAngle r angle = r { robotTurret = turret { turretOrientation = angle } }
+  where turret = robotTurret r
+
+-- Rota la torreta hacia una posición objetivo
+rotateTurretTowards :: Robot -> Position -> Robot
+rotateTurretTowards r targetPos = 
+  let targetAngle = angleToTarget (position r) targetPos
+  in setTurretAngle r targetAngle
