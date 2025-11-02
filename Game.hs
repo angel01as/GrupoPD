@@ -15,7 +15,7 @@ import qualified Entities as E
 import qualified AI
 import GameState
 import Rendering (drawGame)
-import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
 import Collisions (checkCollisions, checkCollision, detectRobotObstacleCollisions, detectProjectileObstacleCollisions, willCollideNextFrame, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
 import Geometry (add2D, prodByScalar, translateVertices)
 import UIButton (UIButton(..))
@@ -46,14 +46,14 @@ regenerateRobotsWithRandomPositions currentState initialState =
     originalRobots = Map.elems (gameRobots initialState)
     robotInfos = [(robotID r, robotBehavior r) | r <- originalRobots]
 
-    obstaclesList = Map.elems newObstacles
+    -- 1) Reposicionar robots de forma determinista (sin depender de obstáculos)
     newRobots = Map.fromList
-      [ (rid, createBasicRobot (generateSafeRobotPosition bounds seedBase rid obstaclesList) behavior rid)
+      [ (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
       | (rid, behavior) <- robotInfos
       ]
 
-    -- Obstáculos deterministas básicos al reset (10 unidades)
-    newObstacles = Map.fromList [ (obstacleID o, o) | o <- generateRandomObstacles stageSize' (realToFrac seedBase) ]
+    -- 2) Generar obstáculos evitando solapar robots ni entre ellos
+    newObstacles = Map.fromList [ (obstacleID o, o) | o <- generateNonOverlappingObstacles stageSize' (realToFrac seedBase) (Map.elems newRobots) ]
 
 playGame :: GameState -> IO ()
 playGame initialState = play window backgroundColor fps initialState drawGame (handleEvents [tryHandleResizing, tryHandleMouse, tryHandleKeys]) preUpdateGame
@@ -241,11 +241,11 @@ updateGame dt oldState = finalState
       in if not near
            then r { robotMemory = Map.insert "edgeStuckTimer" (ScalarValue 0) (Map.insert "edgeCooldown" (ScalarValue (dec edgeCooldown)) m) }
            else
-             let base = if edgeCooldown <= 0
-                          then let rotated = updateRobotVelocity r (R.Rotate (pi/2))
-                                   backed  = updateRobotVelocity rotated (R.MoveBackward 1.3)
-                               in backed { robotMemory = Map.insert "edgeCooldown" (ScalarValue 0.2) m' }
-                          else r { robotMemory = m' }
+             let rotated = updateRobotVelocity r (R.Rotate (pi/2))
+                 backed  = updateRobotVelocity rotated (R.MoveBackward 0.7)
+                 base    = if edgeCooldown <= 0
+                             then backed { robotMemory = Map.insert "edgeCooldown" (ScalarValue 0.2) m' }
+                             else r { robotMemory = m' }
              in if stuckTimer + dt >= 0.3
                   then
                     let turn = AI.safeRandomTurn s r (60,120)
@@ -386,7 +386,7 @@ updateGame dt oldState = finalState
               | obstacleType o /= Solid = acc
               | otherwise =
                   let stopped = setVelocity r (0,0)
-                      backed  = updateRobotVelocity stopped (R.MoveBackward 1.5)
+                      backed  = updateRobotVelocity stopped (R.MoveBackward 1.0)
                       rotated = updateRobotVelocity backed (R.Rotate (pi/2))
                   in acc { gameRobots = Map.insert (robotID r) rotated (gameRobots acc) }
 

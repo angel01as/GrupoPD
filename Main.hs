@@ -1,10 +1,10 @@
 import Game (playGame, generateRandomObstacles)
 import Robot (createBasicRobot)
 import GameState
-import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
 import Entities (Obstacle(..))
 
-import qualified Data.Map as Map (Map, fromList, insert, empty)
+import qualified Data.Map as Map (Map, fromList, insert, empty, toList)
 import qualified Data.Set as Set
 import Data.Time.Clock.POSIX (getPOSIXTime)
 
@@ -154,19 +154,20 @@ makeButtons gs =
         -- Inicia juego a partir de gameBotConfigs
         startGame :: GameState -> GameState
         startGame s =
-            let seedBase = gameSeed s
-                stageSize = gameStageSize s
-                bounds = (fst stageSize / 2, snd stageSize / 2)
-                cfgs = if null (gameBotConfigs s)
-                         then [(1, "aggressive")]
-                         else gameBotConfigs s
-                -- Generamos obstáculos deterministas y posiciones seguras para los robots
-                newObstaclesList = generateRandomObstacles stageSize (realToFrac seedBase)
-                newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
-                newRobots = Map.fromList
-                  [ (rid, createBasicRobot (generateSafeRobotPosition bounds seedBase rid newObstaclesList) behavior rid)
+            let seedBase   = gameSeed s
+                stageSize  = gameStageSize s
+                bounds     = (fst stageSize / 2, snd stageSize / 2)
+                cfgs       = if null (gameBotConfigs s)
+                              then [(1, "aggressive")]
+                              else gameBotConfigs s
+                -- 1) Primero robots (posiciones deterministas)
+                newRobots  = Map.fromList
+                  [ (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
                   | (rid, behavior) <- cfgs ]
-            in s { gameIsInMenu = False
-                 , gameRobots = newRobots
+                -- 2) Obstáculos sin solapar robots ni entre ellos
+                newObstaclesList = generateNonOverlappingObstacles stageSize (realToFrac seedBase) (map snd (Map.toList newRobots))
+                newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
+            in s { gameIsInMenu  = False
+                 , gameRobots    = newRobots
                  , gameObstacles = newObstacles
                  }
