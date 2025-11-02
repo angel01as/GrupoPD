@@ -22,7 +22,7 @@ module AI (
 ) where
 
 import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, shootProjectile, afterShooting, updateTurretCooldown, multiplyMovementAction)
-import Entities (Projectile(..), GameEntity(..), Explosion(..), ID, Obstacle(..))
+import Entities (Projectile(..), GameEntity(..), Explosion(..), ID, Obstacle(..), ObstacleType(..))
 import Geometry (Angle, Scalar, distanceBetween, angleToTarget)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
@@ -402,7 +402,7 @@ turretBot gs robot = sequence [
         ]
 
 stupidBot :: BotBehavior
-stupidBot _ _ = 
+stupidBot _ _ =
   ifThenElse isNearMapEdgeCondition
     (sequence [
       -- Si está cerca del borde, girar 90 grados para cambiar dirección
@@ -411,8 +411,8 @@ stupidBot _ _ =
     ])
     (sequence [
       -- Si no está cerca del borde, comportamiento normal
-      wait 1, 
-      move 1, 
+      wait 1,
+      move 1,
       rotate (pi/16)
     ])
 
@@ -508,7 +508,7 @@ updateRobotAI robot gs deltaTime =
 
       -- Decidir comportamiento
       commands = decideBotBehavior behavior gs robotWithUpdatedCooldown
-       
+
       -- Ejecutar comandos
       result = executeAICommands (condTrace (show (robotID robot) ++ ": " ++ show commands ++ "\n" ++ show (robotMemory robot)) commands) robotWithUpdatedCooldown deltaTime
 
@@ -607,7 +607,7 @@ avoidObstacleSmart gs r =
 -- si una colisión con obstáculo es inminente, frena, retrocede rápido y gira inteligentemente.
 avoidObstacleSmartImmediate :: GameState -> Robot -> Robot
 avoidObstacleSmartImmediate gs r =
-  let obstacles = Map.elems (gameObstacles gs)
+  let obstacles = filter (\o -> obstacleType o == Solid) (Map.elems (gameObstacles gs))
       imminent = filter (\o -> willCollideNextFrame r o 0.3) obstacles
   in if null imminent
        then r
