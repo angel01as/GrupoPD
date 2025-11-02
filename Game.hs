@@ -1,5 +1,5 @@
 -- Módulo que implementa el bucle principal del juego.
-module Game (playGame) where
+module Game (playGame, generateRandomObstacles) where
 
 import Graphics.Gloss hiding (Vector, Point)
 import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
@@ -15,7 +15,7 @@ import qualified Entities as E
 import qualified AI
 import GameState
 import Rendering (drawGame)
-import RandomUtils (generatePositionFromSeed)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition)
 import Collisions (checkCollisions, checkCollision, detectRobotObstacleCollisions, detectProjectileObstacleCollisions, willCollideNextFrame, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
 import Geometry (add2D, prodByScalar, translateVertices)
 import UIButton (UIButton(..))
@@ -46,8 +46,9 @@ regenerateRobotsWithRandomPositions currentState initialState =
     originalRobots = Map.elems (gameRobots initialState)
     robotInfos = [(robotID r, robotBehavior r) | r <- originalRobots]
 
+    obstaclesList = Map.elems newObstacles
     newRobots = Map.fromList
-      [ (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
+      [ (rid, createBasicRobot (generateSafeRobotPosition bounds seedBase rid obstaclesList) behavior rid)
       | (rid, behavior) <- robotInfos
       ]
 
@@ -242,10 +243,10 @@ updateGame dt oldState = finalState
            else
              let base = if edgeCooldown <= 0
                           then let rotated = updateRobotVelocity r (R.Rotate (pi/2))
-                                   backed  = updateRobotVelocity rotated (R.MoveBackward 1.2)
+                                   backed  = updateRobotVelocity rotated (R.MoveBackward 1.3)
                                in backed { robotMemory = Map.insert "edgeCooldown" (ScalarValue 0.2) m' }
                           else r { robotMemory = m' }
-             in if stuckTimer + dt >= 0.2
+             in if stuckTimer + dt >= 0.3
                   then
                     let turn = AI.safeRandomTurn s r (60,120)
                         turned = updateRobotVelocity base (R.Rotate turn)

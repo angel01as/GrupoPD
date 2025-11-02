@@ -1,7 +1,8 @@
-import Game
+import Game (playGame, generateRandomObstacles)
 import Robot (createBasicRobot)
 import GameState
-import RandomUtils (generatePositionFromSeed)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition)
+import Entities (Obstacle(..))
 
 import qualified Data.Map as Map (Map, fromList, insert, empty)
 import qualified Data.Set as Set
@@ -131,7 +132,10 @@ makeButtons gs =
         -- Botones por fila para ciclar el tipo de cada tanque
         rowButtons :: (Int, (Int, String)) -> [UIButton GameState]
         rowButtons (idx, (rid, beh)) =
-            let y = 0.3 - fromIntegral idx * 0.2
+            let n = max 1 (length (gameBotConfigs gs))
+                spacing = 0.6 / fromIntegral n
+                yTop = 0.2
+                y = yTop - fromIntegral idx * spacing
             in [ UIButton { buttonPosition = (-0.15, y), buttonSize = (0.08, 0.10), buttonText = "<"
                                         , buttonHandler = \s -> let upd = map (\(i,b) -> if i==rid then (i, cycleBehaviorPrev b) else (i,b)) (gameBotConfigs s)
                                                                                          in rebuild $ s { gameBotConfigs = upd } }
@@ -156,7 +160,13 @@ makeButtons gs =
                 cfgs = if null (gameBotConfigs s)
                          then [(1, "aggressive")]
                          else gameBotConfigs s
+                -- Generamos obstáculos deterministas y posiciones seguras para los robots
+                newObstaclesList = generateRandomObstacles stageSize (realToFrac seedBase)
+                newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
                 newRobots = Map.fromList
-                    [ (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
-                    | (rid, behavior) <- cfgs ]
-            in s { gameIsInMenu = False, gameRobots = newRobots }
+                  [ (rid, createBasicRobot (generateSafeRobotPosition bounds seedBase rid newObstaclesList) behavior rid)
+                  | (rid, behavior) <- cfgs ]
+            in s { gameIsInMenu = False
+                 , gameRobots = newRobots
+                 , gameObstacles = newObstacles
+                 }

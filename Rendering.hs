@@ -317,24 +317,27 @@ drawGame gs
       where
         relative :: Scalar2D -> (Pixel, Pixel)
         relative (x, y) = (windowWidth/2 * x, windowHeight/2 * y)
-        textScale = min (windowWidth / baseWindowWidth) (windowHeight / baseWindowHeight) * 0.2 
+        textScale = min (windowWidth / 1000) (windowHeight / 700) * 0.25
 
-        panel = Pictures [ Color (withAlpha 0.6 (greyN 0.2)) $ uncurry Translate (relative (0,0)) $ rectangleSolid (windowWidth*0.8) (windowHeight*0.7)
-                         , Color (withAlpha 0.9 white) $ uncurry Translate (relative (0,0)) $ rectangleWire (windowWidth*0.8) (windowHeight*0.7)
+        panel = Pictures [ Color (withAlpha 0.6 (greyN 0.2)) $ uncurry Translate (relative (0,0)) $ rectangleSolid (windowWidth*0.75) (windowHeight*0.65)
+                         , Color (withAlpha 0.9 white) $ uncurry Translate (relative (0,0)) $ rectangleWire (windowWidth*0.75) (windowHeight*0.65)
                          ]
-        title = Color white $ Translate (-300) (windowHeight/2 * 0.3) $ Scale 0.25 0.25 $ Text "CONFIGURACION DE BATALLA"
+        title = Color white $ (uncurry Translate) (relative (-0.28, 0.28)) $ Scale (textScale*1.2) (textScale*1.2) $ Text "CONFIGURACION DE BATALLA"
 
         drawButtons :: Picture
         drawButtons = Pictures $ map drawButton (gameButtons gs)
-        
-        drawButton :: UIButton GameState -> Picture
-        drawButton button = (uncurry Translate) (relative (buttonPosition button)) $ 
-          Pictures [ Color (greyN 0.85) $ rectangleSolid rbw rbh
-                  , Color black $ rectangleWire rbw rbh
-                  , Translate (-rbw/5) (-rbh/5) $ Scale textScale textScale $ Text (buttonText button)
-                  ]
           where
-            (rbw, rbh) = relative (buttonSize button)
+            drawButton :: UIButton GameState -> Picture
+            drawButton button = (uncurry Translate) (relative (buttonPosition button)) $ 
+              Pictures [ Color (greyN 0.85) $ rectangleSolid rbw rbh
+                      , Color black $ rectangleWire rbw rbh
+                      , Translate (-rbw*0.12) (-rbh*0.15) $ Scale textScale textScale $ Text (buttonText button)
+                      ]
+              where
+                (rbw, rbh) = relative (buttonSize button)
+
+        -- Pista inferior
+        hints = (uncurry Translate) (relative (-0.22, -0.24)) $ Scale (textScale*0.7) (textScale*0.7) $ Color (greyN 0.8) $ Text "Usa < y > para cambiar tipo. Click JUGAR para iniciar."
 
         -- Texto de filas: "Tanque i: <tipo>"
         rowsText = Pictures $ zipWith drawRow [0..] (gameBotConfigs gs)
@@ -345,19 +348,20 @@ drawGame gs
                   spacing = 0.6 / fromIntegral n  -- relativo, reparte filas en 60% del panel
                   yTop = 0.2
                   y = yTop - fromIntegral idx * spacing
-                  baseX = 0
-                  label = case beh of
+                  labelTxt = "Tanque " ++ show rid ++ ":"
+                  behTxt = case beh of
                             "aggressive" -> "Agresivo"
                             "defensive"  -> "Defensivo"
                             "sniper"     -> "Francotirador"
                             _             -> capitalize beh
-              in Color white $ (uncurry Translate) (relative (baseX, y)) $ Scale (textScale*0.8) (textScale*0.8) $
-                   Text ("Tanque " ++ show rid ++ ":  " ++ label)
+                  leftCol = (uncurry Translate) (relative (-0.35, y)) $ Scale (textScale*0.85) (textScale*0.85) $ Color white $ Text labelTxt
+                  centerCol = (uncurry Translate) (relative (0.0, y)) $ Scale (textScale*0.9) (textScale*0.9) $ Color white $ Text behTxt
+              in Pictures [leftCol, centerCol]
 
             capitalize [] = []
             capitalize (c:cs) = toEnum (fromEnum (toUpper c)) : cs
 
-        hints = Color (greyN 0.8) $ Translate (-250) (-windowHeight/2 * 0.25) $ Scale 0.15 0.15 $ Text "Usa < y > para cambiar tipo. Click JUGAR para iniciar."
+    
 
     -- Líneas azules semitransparentes entre robots que colisionarán y el obstáculo implicado
     drawPredictedCollisions :: GameState -> Picture

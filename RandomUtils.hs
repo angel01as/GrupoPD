@@ -9,8 +9,13 @@
 
 module RandomUtils (
   generatePositionFromSeed,
-  generateAllRobotPositions
+  generateAllRobotPositions,
+  generateSafeRobotPosition
 ) where
+
+import Entities (Obstacle(..))
+import Data.List (find)
+import Data.Maybe (fromMaybe)
 
 -- Genera una posición aleatoria basándose en una semilla 
 -- Esta función NO usa IO, por lo que puede usarse tanto al inicio como al resetear
@@ -54,4 +59,20 @@ generatePositionFromSeed (maxX, maxY) seedBase robotID = (x * 0.8, y * 0.8)  -- 
 generateAllRobotPositions :: (Float, Float) -> Double -> [Int] -> [(Int, (Float, Float))]
 generateAllRobotPositions bounds seedBase robotIDs = 
   [(robotID, generatePositionFromSeed bounds seedBase robotID) | robotID <- robotIDs]
+
+-- Genera una posición "segura" para un robot evitando solaparse con obstáculos.
+-- Prueba hasta 1001 offsets deterministas alrededor de la semilla base.
+-- Usa un AABB simple con tamaño fijo de robot (5x5) para la comprobación.
+generateSafeRobotPosition :: (Float, Float) -> Double -> Int -> [Obstacle] -> (Float, Float)
+generateSafeRobotPosition bounds seedBase robotID obstacles =
+  let candidates = [ generatePositionFromSeed bounds (seedBase + fromIntegral offset * 0.01) robotID | offset <- [0..2000] ]
+      ok p = not (any (collidesWithObstacle p) obstacles)
+  in fromMaybe (generatePositionFromSeed bounds seedBase robotID) (find ok candidates)
+  where
+    collidesWithObstacle :: (Float, Float) -> Obstacle -> Bool
+    collidesWithObstacle (x,y) o =
+      let (ox,oy) = obstaclePosition o
+          (rw, rh) = (5,5) -- tamaño aproximado del robot
+          (ow, oh) = obstacleSize o
+      in abs (x - ox) < (rw + ow) / 2 && abs (y - oy) < (rh + oh) / 2
 
