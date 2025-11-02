@@ -167,8 +167,8 @@ createBasicRobot :: Position -> String -> ID -> Robot
 createBasicRobot pos behaviorName newID = Rob
   { robotPosition = pos
   , robotVelocity = (0, 0)
-  , robotSize = (5, 5)
-  , robotVertices = map (add2D pos) [(-2.5, -2.5), (2.5, -2.5), (2.5, 2.5), (-2.5, 2.5)]
+  , robotSize = (6, 6)  -- Aumentado a (6, 6) para que se vean mejor
+  , robotVertices = map (add2D pos) [(-3, -3), (3, -3), (3, 3), (-3, 3)]  -- Ajustado para el nuevo tamaño
   , robotEnergy = 100
   , robotMaxEnergy = 100
   , robotRadarRange = 28

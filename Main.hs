@@ -1,5 +1,5 @@
-import Game (playGame, generateRandomObstacles)
-import Robot (createBasicRobot)
+import Game (playGame, generateRandomObstacles, generateRandomObstaclesWithRobots)
+import Robot (createBasicRobot, Robot(..))
 import GameState
 import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
 import Entities (Obstacle(..))
@@ -45,22 +45,38 @@ main :: IO()
 main = do
     -- Estado inicial del torneo: robots en posiciones aleatorias
     let window = (1000, 700)  -- Tamaño de la ventana en píxeles (ancho, alto)
-    let stageSize = (100, 70)  -- Tamaño del escenario de juego en unidades internas (ancho, alto)
+    let stageSize = (200, 140)  -- Tamaño del escenario de juego en unidades internas (ancho, alto) - AUMENTADO
     
     -- Obtener semilla inicial del tiempo del sistema
     time <- getPOSIXTime
     let seedBase = realToFrac time  -- Convertir el tiempo a Float para usarlo como semilla
     
     -- Calcular los límites (bounds) del área jugable
-    -- bounds = (mitad del ancho, mitad del alto) → si stageSize = (100, 70), entonces bounds = (50, 35)
-    -- Esto define que los robots pueden aparecer entre -50 y +50 en X, y entre -35 y +35 en Y
+    -- bounds = (mitad del ancho, mitad del alto) → si stageSize = (200, 140), entonces bounds = (100, 70)
+    -- Esto define que los robots pueden aparecer entre -100 y +100 en X, y entre -70 y +70 en Y
     let bounds = (fst stageSize / 2, snd stageSize / 2)
     
-    -- Generar posiciones aleatorias para cada robot usando la misma semilla pero IDs diferentes
-    -- Cada robot obtiene una posición única dentro del área definida por bounds
-    let pos1 = generatePositionFromSeed bounds seedBase 1  -- Posición para robot ID 1
-    let pos2 = generatePositionFromSeed bounds seedBase 2  -- Posición para robot ID 2
-    let pos3 = generatePositionFromSeed bounds seedBase 3  -- Posición para robot ID 3
+    -- Generar posiciones aleatorias para cada robot verificando que no se solapen
+    -- Distancia mínima entre robots: 15 unidades
+    let minRobotDistance = 15.0 :: Float
+    let generateRobotPositions :: Int -> Int -> [(Float, Float)] -> [(Float, Float)]
+        generateRobotPositions currentId maxId existingPositions
+            | currentId > maxId = []
+            | otherwise =
+                let candidatePos = findSafeRobotPos currentId existingPositions 0
+                in candidatePos : generateRobotPositions (currentId + 1) maxId (candidatePos : existingPositions)
+        
+        findSafeRobotPos :: Int -> [(Float, Float)] -> Int -> (Float, Float)
+        findSafeRobotPos rid existingPos attempt
+            | attempt >= 500 = generatePositionFromSeed bounds (seedBase * fromIntegral rid) rid  -- Fallback después de 500 intentos
+            | otherwise =
+                let candidatePos = generatePositionFromSeed bounds (seedBase + fromIntegral attempt * 0.137) rid
+                    tooClose = any (\pos -> distanceBetween candidatePos pos < minRobotDistance) existingPos
+                in if tooClose then findSafeRobotPos rid existingPos (attempt + 1) else candidatePos
+        
+        distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
+    
+    let [pos1, pos2, pos3] = generateRobotPositions 1 3 []
     
     -- Robots iniciales con comportamientos variados
     let robots = Map.fromList
@@ -74,7 +90,7 @@ main = do
                             { 
                                 gameWindowSize = window,
                                 gameRobots = robots,
-                                gameStageSize = (100, 70),
+                                gameStageSize = stageSize,  -- Usar el stageSize definido arriba (200, 140)
                                 gameImages = imagesMap,
                                 gameSeed = seedBase,
                                 gameBotConfigs = [(1,"aggressive"),(2,"defensive"),(3,"sniper")],
@@ -154,20 +170,41 @@ makeButtons gs =
         -- Inicia juego a partir de gameBotConfigs
         startGame :: GameState -> GameState
         startGame s =
-            let seedBase   = gameSeed s
-                stageSize  = gameStageSize s
-                bounds     = (fst stageSize / 2, snd stageSize / 2)
-                cfgs       = if null (gameBotConfigs s)
-                              then [(1, "aggressive")]
-                              else gameBotConfigs s
-                -- 1) Primero robots (posiciones deterministas)
-                newRobots  = Map.fromList
-                  [ (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
-                  | (rid, behavior) <- cfgs ]
-                -- 2) Obstáculos sin solapar robots ni entre ellos
-                newObstaclesList = generateNonOverlappingObstacles stageSize (realToFrac seedBase) (map snd (Map.toList newRobots))
+            let seedBase = gameSeed s
+                stageSize = gameStageSize s
+                bounds = (fst stageSize / 2, snd stageSize / 2)
+                cfgs = if null (gameBotConfigs s)
+                         then [(1, "aggressive")]
+                         else gameBotConfigs s
+                
+                -- Función auxiliar para verificar distancia entre robots
+                minRobotDist = 15.0 :: Float
+                distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
+                
+                -- PASO 1: Generar robots primero (sin obstáculos aún)
+                generateRobotsSequentially :: [(Int, String)] -> [(Float, Float)] -> [(Int, Robot)]
+                generateRobotsSequentially [] _ = []
+                generateRobotsSequentially ((rid, behavior):rest) existingPositions =
+                    let safePos = findSafePosition rid 0 existingPositions
+                        robot = createBasicRobot safePos behavior rid
+                    in (rid, robot) : generateRobotsSequentially rest (safePos : existingPositions)
+                
+                findSafePosition :: Int -> Int -> [(Float, Float)] -> (Float, Float)
+                findSafePosition rid attempt existingPos
+                    | attempt >= 500 = generatePositionFromSeed bounds (seedBase * fromIntegral rid) rid  -- Fallback sin obstáculos
+                    | otherwise =
+                        let candidatePos = generatePositionFromSeed bounds (seedBase + fromIntegral attempt * 0.137) rid
+                            tooCloseToRobot = any (\pos -> distanceBetween candidatePos pos < minRobotDist) existingPos
+                        in if tooCloseToRobot then findSafePosition rid (attempt + 1) existingPos else candidatePos
+                
+                newRobots = Map.fromList (generateRobotsSequentially cfgs [])
+                
+                -- PASO 2: Ahora generar obstáculos verificando posiciones de robots
+                robotPositions = [robotPosition r | (_, r) <- Map.toList newRobots]
+                newObstaclesList = generateRandomObstaclesWithRobots stageSize (realToFrac seedBase) robotPositions
                 newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
-            in s { gameIsInMenu  = False
-                 , gameRobots    = newRobots
+                
+            in s { gameIsInMenu = False
+                 , gameRobots = newRobots
                  , gameObstacles = newObstacles
                  }

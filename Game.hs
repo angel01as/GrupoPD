@@ -1,11 +1,13 @@
 -- Módulo que implementa el bucle principal del juego.
-module Game (playGame, generateRandomObstacles) where
+module Game (playGame, generateRandomObstacles, generateRandomObstaclesWithRobots) where
 
 import Graphics.Gloss hiding (Vector, Point)
 import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Maybe (mapMaybe)
+import Debug.Trace (trace)
 
 import Geometry
 import Robot (Robot(..), Turret(..), MovementAction(..), MemoryValue(..), isRobotAlive, createBasicRobot, updateRobotVelocity)
@@ -37,7 +39,7 @@ regenerateRobotsWithRandomPositions currentState initialState =
     , gameDebugInfo = gameDebugInfo currentState
     , gameWindowSize = gameWindowSize currentState
     , gameSeed = gameSeed currentState
-    }
+  }
   where
     seedBase = gameSeed currentState
     stageSize' = gameStageSize initialState
@@ -48,8 +50,8 @@ regenerateRobotsWithRandomPositions currentState initialState =
 
     -- 1) Reposicionar robots de forma determinista (sin depender de obstáculos)
     newRobots = Map.fromList
-      [ (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
-      | (rid, behavior) <- robotInfos
+      [ (rid, createBasicRobot (generateSafeRobotPosition bounds seedBase rid []) behavior rid)
+        | (rid, behavior) <- robotInfos
       ]
 
     -- 2) Generar obstáculos evitando solapar robots ni entre ellos
@@ -87,23 +89,58 @@ playGame initialState = play window backgroundColor fps initialState drawGame (h
           | Set.member (Char '0') keys = gs { gameSimulationSpeed = 3.0 }
           | otherwise = gs
 
--- Generación determinista de obstáculos
+-- Generación determinista de obstáculos (verificando que no se generen sobre robots)
 generateRandomObstacles :: Size -> Float -> [Obstacle]
-generateRandomObstacles (w,h) seed = take 4 $ map mkObs ids
+generateRandomObstacles stageSize seed = generateRandomObstaclesWithRobots stageSize seed []
+
+generateRandomObstaclesWithRobots :: Size -> Float -> [(Float, Float)] -> [Obstacle]
+generateRandomObstaclesWithRobots (w,h) seed robotPositions = generateObstaclesSequentially [] ids
   where
     bounds = (w/2, h/2)
     ids = [1001..]
+    minDistanceToRobot = 12.0 :: Float  -- Distancia mínima entre obstáculo y robot
+    minDistanceBetweenObstacles = 15.0 :: Float  -- Distancia mínima entre obstáculos
+    maxObstacles = 6  -- Máximo número de obstáculos
+    
+    -- Distribución de tipos de obstáculos (33.33% cada uno - probabilidad igual)
     pickType rid = let p = frac (sin (seed*0.73 + fromIntegral rid*12.3) * 43758.5453)
-                   in if p < 0.05 then Solid else if p < 0.20 then Hazard else if p < 0.40 then Bomb else Special
+                   in if p < 0.3333 
+                      then Solid    -- 33.33%: No pasa nada (solo impide el paso)
+                      else if p < 0.6666 
+                           then Hazard  -- 33.33%: Hace daño al tocarlos
+                           else Bomb    -- 33.33%: Cuenta atrás y explosión
     frac x = x - fromIntegral (floor x :: Int)
-    mkObs rid =
-      let pos = generatePositionFromSeed bounds (realToFrac seed) rid
-          t = pickType rid
+    
+    distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
+    
+    -- Genera obstáculos secuencialmente verificando que no se solapen
+    generateObstaclesSequentially :: [Obstacle] -> [Int] -> [Obstacle]
+    generateObstaclesSequentially acc _ | length acc >= maxObstacles = acc
+    generateObstaclesSequentially acc [] = acc
+    generateObstaclesSequentially acc (rid:rids) =
+      case tryMkObs 0 rid (map obstaclePosition acc) of
+        Just obs -> generateObstaclesSequentially (obs : acc) rids
+        Nothing -> generateObstaclesSequentially acc rids  -- Si falla, intenta con el siguiente ID
+    
+    -- Intenta generar un obstáculo, reintentando si está muy cerca de un robot u otro obstáculo
+    tryMkObs :: Int -> Int -> [(Float, Float)] -> Maybe Obstacle
+    tryMkObs attempt rid existingObstaclePositions
+      | attempt >= 100 = Nothing  -- Fallback: si después de 100 intentos no encuentra posición, no genera el obstáculo
+      | otherwise =
+          let pos = generatePositionFromSeed bounds (realToFrac seed + fromIntegral attempt * 0.0731) rid
+              tooCloseToRobot = any (\robotPos -> distanceBetween pos robotPos < minDistanceToRobot) robotPositions
+              tooCloseToObstacle = any (\obstaclePos -> distanceBetween pos obstaclePos < minDistanceBetweenObstacles) existingObstaclePositions
+          in if tooCloseToRobot || tooCloseToObstacle
+             then tryMkObs (attempt + 1) rid existingObstaclePositions
+             else Just (mkObs rid pos)
+    
+    mkObs rid pos =
+      let t = pickType rid
           (shape, sz, col) = case t of
-            Solid  -> (E.Square, (8,8), greyN 0.6)
-            Hazard -> (E.Circle, (6,6), makeColor 1 0 0 0.8)
-            Bomb   -> (E.Square, (4,4), makeColor 1 1 0 0.8)
-            Special-> (E.Polygon (regularPolygonVerts 8 3.0), (6,6), makeColor 0.2 0.6 1.0 0.5)
+            Solid  -> (E.Square, (10,10), greyN 0.5)              -- GRIS - Solo impide el paso
+            Hazard -> (E.Circle, (8,8), makeColor 1 0 0 0.9)      -- ROJO - Hace daño constante
+            Bomb   -> (E.Square, (7,7), makeColor 1 1 0 0.9)      -- AMARILLO - Cuenta atrás y explosión
+            Special-> (E.Square, (8,8), makeColor 0.5 0.5 0.5 0.5) -- (No debería generarse)
           localVerts = case shape of
             E.Square -> let (sx, sy) = sz in [(-sx/2,-sy/2),(sx/2,-sy/2),(sx/2,sy/2),(-sx/2,sy/2)]
             E.Circle -> circleApproxVerts (fst sz / 2) 16
@@ -200,14 +237,33 @@ updateGame dt oldState = finalState
     clampToBounds (w,h) e = finalE
       where
         (x,y) = position e
+        (vx, vy) = velocity e
         minX = -w/2; maxX = w/2; minY = -h/2; maxY = h/2
+        margin = 2.0  -- Margen para detección suave
+        
+        -- Verificar si está cerca o fuera de los límites
+        nearLeft = x < minX + margin
+        nearRight = x > maxX - margin
+        nearTop = y > maxY - margin
+        nearBottom = y < minY + margin
+        
+        -- Clampear posición si está fuera
         cx = max minX (min maxX x)
         cy = max minY (min maxY y)
-        t = (cx - x, cy - y)
-        moved = if t == (0,0)
-                  then e
-                  else setVertices (setPosition (setVelocity e (0,0)) (cx,cy)) (translateVertices (vertices e) t)
-        finalE = moved
+        
+        -- Rebote suave: invertir solo la componente de velocidad que va hacia el límite
+        nvx = if (nearLeft && vx < 0) || (nearRight && vx > 0) then -vx * 0.6 else vx
+        nvy = if (nearBottom && vy < 0) || (nearTop && vy > 0) then -vy * 0.6 else vy
+        
+        -- Solo aplicar cambios si realmente está fuera o muy cerca
+        needsCorrection = x /= cx || y /= cy || nearLeft || nearRight || nearTop || nearBottom
+        
+        finalE = if needsCorrection
+                 then let t = (cx - x, cy - y)
+                          newPos = (cx, cy)
+                          newVerts = translateVertices (vertices e) t
+                      in setVertices (setPosition (setVelocity e (nvx, nvy)) newPos) newVerts
+                 else e
 
     withinBounds :: Size -> (Float,Float) -> Bool
     withinBounds (w,h) (x,y) = x > -w/2 && x < w/2 && y > -h/2 && y < h/2
@@ -225,43 +281,8 @@ updateGame dt oldState = finalState
       , gameCollisionCooldown = newCollisionCooldown
       }
 
-    -- Manejo inteligente del borde del mapa (gira 90° una vez y, si persiste 0.2s, giro aleatorio 60°-120° y empuje hacia dentro)
-    handleMapEdge :: Scalar -> GameState -> Robot -> Robot
-    handleMapEdge dt s r =
-      let (w,h) = gameStageSize s
-          margin = 3 :: Float
-          minX = -w/2 + margin; maxX =  w/2 - margin
-          minY = -h/2 + margin; maxY =  h/2 - margin
-          near = any (\(vx,vy) -> vx <= minX || vx >= maxX || vy <= minY || vy >= maxY) (vertices r)
-          m = robotMemory r
-          edgeCooldown = case Map.lookup "edgeCooldown" m of { Just (ScalarValue v) -> v; _ -> 0 }
-          stuckTimer   = case Map.lookup "edgeStuckTimer" m of { Just (ScalarValue v) -> v; _ -> 0 }
-          dec x = max 0 (x - dt)
-          m' = Map.insert "edgeCooldown" (ScalarValue (dec edgeCooldown)) $ Map.insert "edgeStuckTimer" (ScalarValue (if near then stuckTimer + dt else 0)) m
-      in if not near
-           then r { robotMemory = Map.insert "edgeStuckTimer" (ScalarValue 0) (Map.insert "edgeCooldown" (ScalarValue (dec edgeCooldown)) m) }
-           else
-             let rotated = updateRobotVelocity r (R.Rotate (pi/2))
-                 backed  = updateRobotVelocity rotated (R.MoveBackward 0.7)
-                 base    = if edgeCooldown <= 0
-                             then backed { robotMemory = Map.insert "edgeCooldown" (ScalarValue 0.2) m' }
-                             else r { robotMemory = m' }
-             in if stuckTimer + dt >= 0.3
-                  then
-                    let turn = AI.safeRandomTurn s r (60,120)
-                        turned = updateRobotVelocity base (R.Rotate turn)
-                        -- Empuje ligero hacia adentro: corrige posición si excede límites
-                        (x0,y0) = position turned
-                        px = (if x0 < minX then (minX - x0 + 0.3) else if x0 > maxX then (maxX - x0 - 0.3) else 0)
-                        py = (if y0 < minY then (minY - y0 + 0.3) else if y0 > maxY then (maxY - y0 - 0.3) else 0)
-                        push = (px, py)
-                        newPos = add2D (position turned) push
-                        newVerts = translateVertices (vertices turned) push
-                    in setVertices (setPosition (turned { robotMemory = Map.insert "edgeStuckTimer" (ScalarValue 0) (robotMemory turned) }) newPos) newVerts
-                  else base
-
-    edgeAdjustedRobots = fmap (handleMapEdge deltaTime phisicsState) (gameRobots phisicsState)
-    edgeState = phisicsState { gameRobots = edgeAdjustedRobots }
+    -- Ya no necesitamos handleMapEdge complejo, el rebote suave en clampToBounds es suficiente
+    edgeState = phisicsState
 
     -- Predicción de colisiones Robot–Obstáculo (pre-IA)
     robotObstaclePredictions =
@@ -358,7 +379,7 @@ updateGame dt oldState = finalState
     applyRobotRobotCollisions [] gs = gs
     applyRobotRobotCollisions ((r1, r2):colls) gs = applyRobotRobotCollisions colls updatedGS
       where
-        robotRobotDamage = 5 :: Float
+        robotRobotDamage = 10 :: Float  -- Aumentado de 5 a 10 DPS
         adjustRobot :: Robot -> Map.Map ID Robot -> Map.Map ID Robot
         adjustRobot r robotsMap
           | isRobotAlive updatedR = Map.insert (robotID r) updatedR robotsMap
@@ -368,49 +389,122 @@ updateGame dt oldState = finalState
         updatedGS = gs { gameRobots = adjustRobot r1 (adjustRobot r2 (gameRobots gs)) }
 
     collisionState =
-      applyRobotRobotCollisions robotRobotCollisions $
-      applyRobotProjectileCollisions robotProjectileCollisions $
+        applyRobotRobotCollisions robotRobotCollisions $
+        applyRobotProjectileCollisions robotProjectileCollisions $
       applyExplosions (Map.elems $ gameExplosions predictedState) predictedState
 
-    -- Obstáculos
+    -- Obstáculos - Recalcular colisiones con el estado actualizado
+    -- ORDEN IMPORTANTE: bombas primero (para que se activen antes de que el robot retroceda), luego hazard, luego solid
     handleObstacleEffects :: GameState -> GameState
-    handleObstacleEffects gs = detonateStep . hazardStep . solidStep $ gs
+    handleObstacleEffects gs = 
+      let debugObstacles = if gameDebugInfo gs && (gameFrame gs `mod` 60 == 0)  -- Cada 60 frames (1 segundo)
+                           then trace ("=== OBSTÁCULOS: " ++ show [(obstacleID o, obstacleType o) | o <- Map.elems (gameObstacles gs)])
+                           else id
+      in debugObstacles $ solidStep . hazardStep . detonateStep $ gs
       where
-        hazardDps = 10 :: Float
+        hazardDamage = 15 :: Float  -- Daño instantáneo por colisión (más que robot-robot que es 10 DPS)
 
-        -- Robot sólido: detener, retroceder fuerte y girar 90° (sin empujar/atravesar)
+        -- Robot sólido: detener, retroceder POCO y girar 90° (sin empujar/atravesar)
         solidStep :: GameState -> GameState
-        solidStep s = foldl applySolid s robotObstacleCollisions
+        solidStep s = foldl applySolid s solidCollisions
           where
+            -- Recalcular colisiones PARA SOLID con el estado actual
+            solidCollisions = detectRobotObstacleCollisions (Map.elems $ gameRobots s) (Map.elems $ gameObstacles s)
             applySolid acc (r, o, _push)
               | obstacleType o /= Solid = acc
               | otherwise =
                   let stopped = setVelocity r (0,0)
-                      backed  = updateRobotVelocity stopped (R.MoveBackward 1.0)
+                      backed  = updateRobotVelocity stopped (R.MoveBackward 0.5)  -- Reducido de 1.5 a 0.5
                       rotated = updateRobotVelocity backed (R.Rotate (pi/2))
                   in acc { gameRobots = Map.insert (robotID r) rotated (gameRobots acc) }
 
         hazardStep :: GameState -> GameState
-        hazardStep s = foldl applyHazard s robotObstacleCollisions
+        hazardStep s = 
+          let allCollisions = detectRobotObstacleCollisions (Map.elems $ gameRobots s) (Map.elems $ gameObstacles s)
+              hazardOnly = filter (\(_, o, _) -> obstacleType o == Hazard) allCollisions
+              debugAllColl = if gameDebugInfo s && not (null allCollisions)
+                             then trace ("=== TODAS LAS COLISIONES: " ++ show [(robotID r, obstacleID o, obstacleType o) | (r, o, _) <- allCollisions])
+                             else id
+              debugHazards = if gameDebugInfo s && not (null hazardOnly)
+                             then trace ("=== COLISIONES HAZARD: " ++ show [(robotID r, obstacleID o) | (r, o, _) <- hazardOnly])
+                             else id
+          in debugAllColl $ debugHazards $ foldl applyHazard s allCollisions
           where
             applyHazard acc (r, o, _)
               | obstacleType o /= Hazard = acc
-              | otherwise = acc { gameRobots = Map.adjust (\_ -> r { robotEnergy = robotEnergy r - hazardDps * deltaTime }) (robotID r) (gameRobots acc) }
+              | otherwise = 
+                  let debugHazardMsg = if gameDebugInfo acc
+                                       then trace ("Robot " ++ show (robotID r) ++ " chocó con HAZARD " ++ show (obstacleID o) ++ " - Aplicando " ++ show hazardDamage ++ " de daño!")
+                                       else id
+                  in debugHazardMsg $ case Map.lookup (robotID r) (gameRobots acc) of
+                    Just currentRobot -> 
+                      let energiaBefore = robotEnergy currentRobot
+                          updatedRobot = currentRobot { robotEnergy = energiaBefore - hazardDamage }
+                          energiaAfter = robotEnergy updatedRobot
+                          debugEnergy = if gameDebugInfo acc
+                                        then trace ("Energía: " ++ show energiaBefore ++ " -> " ++ show energiaAfter)
+                                        else id
+                          -- Crear efecto de colisión IGUAL que cuando impacta un proyectil
+                          collisionEffect = createExplosion (obstaclePosition o) maxRadius explDamage maxTime (gameTotalExplosionCount acc)
+                          newExplosions = Map.insert (gameTotalExplosionCount acc) collisionEffect (gameExplosions acc)
+                      in debugEnergy $ if isRobotAlive updatedRobot
+                         then acc { gameRobots = Map.insert (robotID r) updatedRobot (gameRobots acc)
+                                  , gameExplosions = newExplosions
+                                  , gameTotalExplosionCount = gameTotalExplosionCount acc + 1
+                                  }
+                         else let debugDeath = if gameDebugInfo acc
+                                               then trace ("Robot " ++ show (robotID r) ++ " MURIÓ por Hazard!")
+                                               else id
+                              in debugDeath $ acc { gameRobots = Map.delete (robotID r) (gameRobots acc)
+                                                  , gameExplosions = newExplosions
+                                                  , gameTotalExplosionCount = gameTotalExplosionCount acc + 1
+                                                  }  -- Eliminar si muere
+                    Nothing -> acc
 
         detonateStep :: GameState -> GameState
         detonateStep s0 = s3
           where
-            s1 = foldl activate s0 robotObstacleCollisions
+            -- Recalcular colisiones PARA BOMBAS con el estado actual (después de hazardStep)
+            bombCollisions = detectRobotObstacleCollisions (Map.elems $ gameRobots s0) (Map.elems $ gameObstacles s0)
+            -- Activar bombas tocadas (solo si no están ya activadas)
+            s1 = foldl activate s0 bombCollisions
             activate acc (r, o, _)
               | obstacleType o /= Bomb = acc
-              | otherwise = acc { gameObstacles = Map.adjust (\ob -> ob { obstacleTimer = Just (case obstacleTimer ob of Nothing -> 3.0; Just t -> t) }) (obstacleID o) (gameObstacles acc) }
+              | otherwise = 
+                  let debugMsg = if gameDebugInfo acc 
+                                 then trace ("Robot " ++ show (robotID r) ++ " tocó bomba " ++ show (obstacleID o)) 
+                                 else id
+                  in debugMsg $ case Map.lookup (obstacleID o) (gameObstacles acc) of
+                    Just bomb -> 
+                      case obstacleTimer bomb of
+                        Nothing -> 
+                          let activatedBomb = bomb { obstacleTimer = Just 2.0 }
+                              debugActivate = if gameDebugInfo acc
+                                              then trace ("¡Bomba " ++ show (obstacleID o) ++ " ACTIVADA con timer 2.0!")
+                                              else id
+                          in debugActivate $ acc { gameObstacles = Map.insert (obstacleID o) activatedBomb (gameObstacles acc) }
+                        Just t -> 
+                          let debugAlready = if gameDebugInfo acc
+                                             then trace ("Bomba " ++ show (obstacleID o) ++ " ya está activada, timer: " ++ show t)
+                                             else id
+                          in debugAlready acc  -- Ya está activada, no hacer nada
+                    Nothing -> acc
 
+            -- Actualizar timers de TODAS las bombas activadas
             (s2, toExplode) = Map.foldlWithKey advance (s1, []) (gameObstacles s1)
-            advance (acc, ex) oid ob = case obstacleTimer ob of
-              Just t | t - deltaTime <= 0 -> (acc { gameObstacles = Map.delete oid (gameObstacles acc) }, (oid, ob):ex)
-                     | otherwise          -> (acc { gameObstacles = Map.insert oid (ob { obstacleTimer = Just (t - deltaTime) }) (gameObstacles acc) }, ex)
-              _ -> (acc, ex)
+            advance (acc, ex) oid ob 
+              | obstacleType ob /= Bomb = (acc, ex)  -- Solo procesar bombas
+              | otherwise = case obstacleTimer ob of
+                  Just t 
+                    | t - deltaTime <= 0 -> 
+                        -- Bomba explota: eliminarla y añadir a lista de explosiones
+                        (acc { gameObstacles = Map.delete oid (gameObstacles acc) }, (oid, ob):ex)
+                    | otherwise -> 
+                        -- Decrementar timer
+                        (acc { gameObstacles = Map.insert oid (ob { obstacleTimer = Just (t - deltaTime) }) (gameObstacles acc) }, ex)
+                  Nothing -> (acc, ex)  -- Bomba no activada todavía
 
+            -- Crear explosiones para bombas que explotaron
             s3 = foldl mkExplosion s2 toExplode
             mkExplosion acc (_, ob) =
               let totalE = gameTotalExplosionCount acc
@@ -437,8 +531,8 @@ updateGame dt oldState = finalState
     insertSpawnedProjectiles :: ID -> Map.Map ID Projectile -> [Projectile] -> Map.Map ID Projectile
     insertSpawnedProjectiles _ m [] = m
     insertSpawnedProjectiles nextID m (p:ps) = insertSpawnedProjectiles (nextID + 1) newM ps
-      where
-        newM = Map.insert nextID (p { projectileID = nextID }) m
+        where
+            newM = Map.insert nextID (p { projectileID = nextID }) m
 
     totalProjectileCount = gameTotalProjectileCount afterObstacles
     allProjectiles = insertSpawnedProjectiles totalProjectileCount (gameProjectiles afterObstacles) spawnedProjectiles
