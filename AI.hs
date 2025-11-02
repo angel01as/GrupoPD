@@ -10,7 +10,7 @@ module AI (
   -- Funciones del DSL
   move, moveBackward, rotate, multiplyVelocity, shoot, wait, rotateTurret, ifThen, ifThenElse, sequence,
   -- Condiciones
-  hasTarget, isLowEnergy, isUnderAttack, distanceTo, angleTo, isNearMapEdgeCondition,
+  hasTarget, isLowEnergy, isUnderAttack, distanceTo, angleTo, isNearMapEdgeCondition, isNearObstacle,
   -- Decisor de comportamientos
   decideBotBehavior,
   -- Ejecutor de comandos
@@ -18,11 +18,11 @@ module AI (
   -- Comportamientos de ejemplo
   aggressiveBot, defensiveBot, exampleBot, sniperBot,
   -- Utilidades nuevas (exportadas para tests/extensión)
-  safeRandomTurn, adjustTurretAngle, avoidEdgeSmart, interpolateAngle, resetIfStuck
+  safeRandomTurn, adjustTurretAngle, avoidEdgeSmart, avoidObstacleSmart, avoidObstacleSmartImmediate, interpolateAngle, resetIfStuck
 ) where
 
 import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, shootProjectile, afterShooting, updateTurretCooldown, multiplyMovementAction)
-import Entities (Projectile(..), GameEntity(..), Explosion(..), ID)
+import Entities (Projectile(..), GameEntity(..), Explosion(..), ID, Obstacle(..))
 import Geometry (Angle, Scalar, distanceBetween, angleToTarget)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
@@ -31,6 +31,7 @@ import Prelude hiding (sequence, repeat)
 import GameState
 import Debug.Trace
 import Geometry (add2D, angleFactor, prodByScalar, deg2rad)
+import Collisions (willCollideNextFrame)
 -- ============================================================================
 -- DSL PARA ACCIONES DEL BOT
 -- ============================================================================
@@ -56,6 +57,7 @@ data BotCondition
   | AngleToTarget Angle          -- ¿Ángulo al enemigo < X?
   | MemoryEquals String MemoryValue  -- ¿Memoria tiene valor X?
   | IsNearMapEdge                -- ¿Está cerca del borde del mapa?
+  | IsNearObstacle               -- ¿Está cerca de un obstáculo?
   | Not BotCondition             -- Negación lógica
   | And BotCondition BotCondition    -- Y lógico
   | Or BotCondition BotCondition     -- O lógico
@@ -140,6 +142,10 @@ memoryEquals = MemoryEquals
 isNearMapEdgeCondition :: BotCondition
 isNearMapEdgeCondition = IsNearMapEdge
 
+-- Nuevo: cerca de obstáculo
+isNearObstacle :: BotCondition
+isNearObstacle = IsNearObstacle
+
 -- ============================================================================
 -- EVALUADOR DE CONDICIONES
 -- ============================================================================
@@ -179,6 +185,17 @@ evalCondition (MemoryEquals key value) _ robot = -- _ es el estado del juego y e
 
 -- CONDICIÓN: ¿Está el robot cerca del borde del mapa?
 evalCondition IsNearMapEdge gs robot = isNearMapEdge gs robot
+
+-- CONDICIÓN: ¿Está cerca de algún obstáculo (colisión o proximidad leve)?
+evalCondition IsNearObstacle gs robot = any nearObs (Map.elems (gameObstacles gs))
+  where
+    (rx, ry) = position robot
+    (rw, _) = size robot
+    nearObs o =
+      let (ox, oy) = obstaclePosition o
+          (ow, _) = obstacleSize o
+          threshold = max rw ow + 3.0
+      in distanceBetween (rx, ry) (ox, oy) <= threshold
 
 -- OPERADORES LÓGICOS
 evalCondition (Not cond) gs robot = not (evalCondition cond gs robot)
@@ -248,9 +265,11 @@ decideInstruction (Sequence instructions) gs robot =  -- Se vuelve a llamar porq
 -- Bot agresivo que busca enemigos y los ataca de frente
 aggressiveBot :: BotBehavior
 aggressiveBot gs robot =
-  -- 1) Evitar borde con backoff y giro suave
-  ifThenElse isNearMapEdgeCondition
-    (avoidEdgeSmart gs robot)
+  -- 1) Evitar obstáculo; 2) Evitar borde
+  ifThenElse isNearObstacle
+    (avoidObstacleSmart gs robot)
+    (ifThenElse isNearMapEdgeCondition
+      (avoidEdgeSmart gs robot)
     (
       let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
           hasEnemy = enemy /= robot
@@ -285,20 +304,22 @@ aggressiveBot gs robot =
            wait 0.05
          ]
          -- 2) Sin enemigo: patrulla y recentra torreta lentamente
-         else sequence [
+      else sequence [
            setMemory "mode" (StringValue "patrolling"),
            rotateTurret (fst (adjustTurretAngle "aggressive" gs robot)),
            move 0.4,
            rotate (pi/24),
            wait 0.15
          ]
-    )
+    ))
 
 -- Bot francotirador que mantiene distancia y dispara con precisión
 sniperBot :: BotBehavior
 sniperBot gs robot =
-  ifThenElse isNearMapEdgeCondition
-    (avoidEdgeSmart gs robot)
+  ifThenElse isNearObstacle
+    (avoidObstacleSmart gs robot)
+    (ifThenElse isNearMapEdgeCondition
+      (avoidEdgeSmart gs robot)
     (
       let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
           hasEnemy = enemy /= robot
@@ -319,18 +340,20 @@ sniperBot gs robot =
            ifThen (BoolCondition turretAligned) shoot,
            wait 0.15
          ]
-         else sequence [
+      else sequence [
            setMemory "mode" (StringValue "searching"),
            rotateTurret (fst (adjustTurretAngle "sniper" gs robot)),
            wait 0.25
          ]
-    )
+    ))
 
 -- Bot defensivo que se protege y calcula sus movimientos
 defensiveBot :: BotBehavior
 defensiveBot gs robot =
-  ifThenElse isNearMapEdgeCondition
-    (avoidEdgeSmart gs robot)
+  ifThenElse isNearObstacle
+    (avoidObstacleSmart gs robot)
+    (ifThenElse isNearMapEdgeCondition
+      (avoidEdgeSmart gs robot)
     (
       let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
           hasEnemy = enemy /= robot
@@ -359,14 +382,14 @@ defensiveBot gs robot =
              ),
            wait 0.08
          ]
-         else sequence [
+      else sequence [
            setMemory "mode" (StringValue "patrolling"),
            rotate (pi/18),
            move 0.25,
            rotateTurret (fst (adjustTurretAngle "defensive" gs robot)),
            wait 0.2
          ]
-    )
+    ))
 
 -- (definida más abajo con una versión robusta)
 
@@ -573,6 +596,33 @@ avoidEdgeSmart gs r =
      else if backNear then
        sequence [ move 0.5, rotate turn, wait 0.10 ]
      else Simple DoNothingCommand
+
+-- Evitación de obstáculos: giro corto + pequeña retirada
+avoidObstacleSmart :: GameState -> Robot -> BotInstruction
+avoidObstacleSmart gs r =
+  let turn = safeRandomTurn gs r (75, 105)
+  in sequence [ moveBackward 0.5, rotate turn, wait 0.1 ]
+
+-- Versión inmediata usada por el bucle del juego antes de aplicar la IA:
+-- si una colisión con obstáculo es inminente, frena, retrocede rápido y gira inteligentemente.
+avoidObstacleSmartImmediate :: GameState -> Robot -> Robot
+avoidObstacleSmartImmediate gs r =
+  let obstacles = Map.elems (gameObstacles gs)
+      imminent = filter (\o -> willCollideNextFrame r o 0.3) obstacles
+  in if null imminent
+       then r
+       else
+         let (ox, oy) = obstaclePosition (head imminent)
+             (rx, ry) = position r
+             _dx = rx - ox; dy = ry - oy
+             -- alternar signo cuando hay múltiples obstáculos cercanos para desbloquear
+             baseTurn = if dy > 0 then (pi/2) else (-pi/2)
+             altSign = if length imminent > 1 && (gameFrame gs + robotID r) `mod` 2 == 0 then (-1) else 1 :: Int
+             turn = fromIntegral altSign * baseTurn
+             stopped = setVelocity r (0,0)
+             backed  = updateRobotVelocity stopped (MoveBackward 1.5)
+             rotated = updateRobotVelocity backed (Rotate turn)
+         in rotated
 
 -- Resetea bloqueos si detecta estados antiguos o esperas absurdas (para compatibilidad)
 resetIfStuck :: Robot -> Scalar -> BotInstruction

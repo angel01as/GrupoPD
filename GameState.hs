@@ -17,6 +17,8 @@ data GameState = GameState
     gameRobots :: Map.Map ID Robot,   -- Robots en un map según su ID
     gameProjectiles :: Map.Map ID Projectile, -- Proyectiles
     gameExplosions :: Map.Map ID Explosion,
+    gameObstacles :: Map.Map ID Obstacle,
+    gameBotConfigs :: [(ID, String)], -- Configuración de bots para el menú [(id, tipo)]
     gameTime :: Scalar, -- Tiempo actual del juego
     gameFrame :: Int, -- Frame actual del juego
     gameWindowSize :: (Int, Int),
@@ -45,6 +47,8 @@ instance Default GameState where
       gameTime = 0,
       gameFrame = 0,
       gameExplosions = Map.empty,
+      gameObstacles = Map.empty,
+  gameBotConfigs = [],
       gameStageSize = (100, 50),
       gameImages = Map.empty,
       gameKeysPressed = Set.empty,

@@ -3,10 +3,14 @@
 module Entities (
   -- Con tipo data(..) se exporta todo lo que tiene, constructor incluido.
   GameEntity(..), Projectile(..), Explosion(..), ExplosionType(..), ID,
+  -- Obstáculos
+  ObstacleType(..), ObstacleShape(..), Obstacle(..),
+  -- Explosiones
   createExplosion, createCollisionExplosion, updateExplosion, isExplosionActive, isExplosionDamaging
 ) where
 
 import Geometry (Size, Position, Scalar, Angle, Point, Velocity, add2D, prodByScalar, rotateVertices, translateVertices)
+import Graphics.Gloss (Color)
 
 type ID = Int
 
@@ -74,6 +78,41 @@ instance GameEntity Projectile where
   setVertices p verts = p { projectileVertices = verts }
   setSize p siz = p { projectileSize = siz }
   setOrientation p ori = p { projectileOrientation = ori }
+
+-- ============================================================================
+-- OBSTÁCULOS
+-- ============================================================================
+
+data ObstacleType = Solid | Hazard | Bomb | Special
+  deriving (Show, Eq)
+
+data ObstacleShape = Square | Circle | Polygon [Point]
+  deriving (Show, Eq)
+
+data Obstacle = Obs
+  { obstacleID :: ID
+  , obstacleType :: ObstacleType
+  , obstacleShape :: ObstacleShape
+  , obstaclePosition :: Position
+  , obstacleVertices :: [Point]
+  , obstacleSize :: Size
+  , obstacleOrientation :: Angle
+  , obstacleHealth :: Scalar
+  , obstacleTimer :: Maybe Scalar -- Solo para bombas
+  , obstacleColor :: Color
+  } deriving (Show, Eq)
+
+instance GameEntity Obstacle where
+  position = obstaclePosition
+  velocity _ = (0,0)
+  vertices = obstacleVertices
+  size = obstacleSize
+  orientation = obstacleOrientation
+  setPosition o pos = o { obstaclePosition = pos }
+  setVelocity o _ = o -- obstáculos no tienen velocidad
+  setVertices o verts = o { obstacleVertices = verts }
+  setSize o siz = o { obstacleSize = siz }
+  setOrientation o ori = o { obstacleOrientation = ori }
 
 -- ============================================================================
 -- FUNCIONES PARA MANEJAR EXPLOSIONES

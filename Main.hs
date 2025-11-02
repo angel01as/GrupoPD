@@ -22,9 +22,21 @@ import UIButton
 availableBehaviors :: [String]
 availableBehaviors = ["aggressive", "defensive", "sniper"]
 
--- Asigna comportamiento basado en el índice del robot
-getBehaviorForIndex :: Int -> String
-getBehaviorForIndex idx = availableBehaviors !! (idx `mod` length availableBehaviors)
+-- Ciclar comportamiento a la derecha
+cycleBehavior :: String -> String
+cycleBehavior b = case b of
+    "aggressive" -> "defensive"
+    "defensive"  -> "sniper"
+    "sniper"     -> "aggressive"
+    _             -> "aggressive"
+
+-- Ciclar comportamiento a la izquierda
+cycleBehaviorPrev :: String -> String
+cycleBehaviorPrev b = case b of
+    "aggressive" -> "sniper"
+    "defensive"  -> "aggressive"
+    "sniper"     -> "defensive"
+    _             -> "aggressive"
 
 -- Punto de entrada al juego.
 
@@ -52,9 +64,9 @@ main = do
     -- Robots iniciales con comportamientos variados
     let robots = Map.fromList
             [ 
-                (1, createBasicRobot pos1 (getBehaviorForIndex 0) 1),  -- aggressive
-                (2, createBasicRobot pos2 (getBehaviorForIndex 1) 2),  -- defensive
-                (3, createBasicRobot pos3 (getBehaviorForIndex 2) 3)   -- sniper
+                (1, createBasicRobot pos1 "aggressive" 1),
+                (2, createBasicRobot pos2 "defensive" 2),
+                (3, createBasicRobot pos3 "sniper" 3)
             ]
     imagesMap <- loadImages usedImages
     let initialState = def 
@@ -64,7 +76,8 @@ main = do
                                 gameStageSize = (100, 70),
                                 gameImages = imagesMap,
                                 gameSeed = seedBase,
-                                gameButtons = makeButtons,
+                                gameBotConfigs = [(1,"aggressive"),(2,"defensive"),(3,"sniper")],
+                                gameButtons = makeButtons def { gameBotConfigs = [(1,"aggressive"),(2,"defensive"),(3,"sniper")], gameWindowSize = window },
                                 gameTotalRobotCount = 3  -- Iniciar con 3 robots por defecto
                             }
     playGame initialState
@@ -81,68 +94,69 @@ loadImages (p:ps) = do
       putStrLn $ "[X] No se pudo cargar: " ++ p
       pure rest
 
-makeButtons :: [UIButton GameState]
-makeButtons =
-  (playButton) : concatMap rowButtons [(-1) .. 1] 
-  where
-    buttonColumnCenter = 0.25
-    buttonOffsetX = 0.075
-    btnSize = (0.10, 0.10)
-    rowButtons i =
-        [ UIButton
-            {   
-                buttonPosition = (buttonColumnCenter - buttonOffsetX, y),
-                buttonSize     = btnSize,
-                buttonText     = "-",
-                buttonHandler  = getLeftHandler i
-            }
-        , UIButton
-            {   
-                buttonPosition = (buttonColumnCenter + buttonOffsetX, y),
-                buttonSize     = btnSize,
-                buttonText     = "+",
-                buttonHandler  = getRightHandler i
-            }
+makeButtons :: GameState -> [UIButton GameState]
+makeButtons gs =
+    concat
+        [ [decCountBtn, incCountBtn]
+        , concatMap rowButtons (zip [0..] (gameBotConfigs gs))
+        , [playButton]
         ]
-        where
-            y = fromIntegral i * 0.25
+    where
+        -- reconstruye botones tras cualquier cambio
+        rebuild :: GameState -> GameState
+        rebuild s = s { gameButtons = makeButtons s }
 
-            getLeftHandler :: Int -> (GameState -> GameState)
-            getLeftHandler i
-                | i == 1 = (\gs -> if gameTotalRobotCount gs > 0 then gs { gameTotalRobotCount = gameTotalRobotCount gs - 1 } else gs)
-                | i == 0 = (\gs -> if gameSimulationSpeed gs > 0 then gs { gameSimulationSpeed = gameSimulationSpeed gs - 0.1 } else gs)
-                | i == -1 = changeDebugMode
-                | otherwise = id
-            getRightHandler :: Int -> (GameState -> GameState)
-            getRightHandler i
-                | i == 1 = (\gs -> if gameTotalRobotCount gs < 20 then gs { gameTotalRobotCount = gameTotalRobotCount gs + 1 } else gs)
-                | i == 0 = (\gs -> if gameSimulationSpeed gs < 10 then gs { gameSimulationSpeed = gameSimulationSpeed gs + 0.1 } else gs)
-                | i == -1 = changeDebugMode
-                | otherwise = id
+        -- Control del número de tanques
+        decCountBtn = UIButton
+            { buttonPosition = (-0.25, 0.6)
+            , buttonSize     = (0.08, 0.10)
+            , buttonText     = "<"
+            , buttonHandler  = \s -> let n = length (gameBotConfigs s)
+                                                                in if n > 1
+                                                                         then rebuild $ s { gameBotConfigs = take (n-1) (gameBotConfigs s)
+                                                                                                            , gameTotalRobotCount = n-1 }
+                                                                         else s
+            }
+        incCountBtn = UIButton
+            { buttonPosition = (0.25, 0.6)
+            , buttonSize     = (0.08, 0.10)
+            , buttonText     = ">"
+            , buttonHandler  = \s ->
+                let n = length (gameBotConfigs s)
+                    nextId = if null (gameBotConfigs s) then 1 else (maximum (map fst (gameBotConfigs s)) + 1)
+                in rebuild $ s { gameBotConfigs = gameBotConfigs s ++ [(nextId, "aggressive")]
+                               , gameTotalRobotCount = n+1 }
+            }
 
-            changeDebugMode gs = gs { gameDebugInfo = not (gameDebugInfo gs) }
-    playButton = UIButton 
-        {
-            buttonPosition = (0, -0.7),
-            buttonSize     = (0.8, 0.2),
-            buttonText     = "Jugar",
-            buttonHandler  = startGame
-        }
-    
-    -- Función que inicia el juego generando robots según gameTotalRobotCount
-    startGame :: GameState -> GameState
-    startGame gs = 
-        let robotCount = gameTotalRobotCount gs
-            seedBase = gameSeed gs
-            stageSize = gameStageSize gs
-            bounds = (fst stageSize / 2, snd stageSize / 2)
-            
-            -- Generar lista de robots con comportamientos asignados
-            newRobots = Map.fromList [
-                (rid, createBasicRobot 
-                    (generatePositionFromSeed bounds seedBase rid) 
-                    (getBehaviorForIndex (rid - 1))  -- rid empieza en 1, índice en 0
-                    rid)
-                | rid <- [1..robotCount]
-              ]
-        in gs { gameIsInMenu = False, gameRobots = newRobots }
+        -- Botones por fila para ciclar el tipo de cada tanque
+        rowButtons :: (Int, (Int, String)) -> [UIButton GameState]
+        rowButtons (idx, (rid, beh)) =
+            let y = 0.3 - fromIntegral idx * 0.2
+            in [ UIButton { buttonPosition = (-0.15, y), buttonSize = (0.08, 0.10), buttonText = "<"
+                                        , buttonHandler = \s -> let upd = map (\(i,b) -> if i==rid then (i, cycleBehaviorPrev b) else (i,b)) (gameBotConfigs s)
+                                                                                         in rebuild $ s { gameBotConfigs = upd } }
+                 , UIButton { buttonPosition = (0.15, y), buttonSize = (0.08, 0.10), buttonText = ">"
+                                        , buttonHandler = \s -> let upd = map (\(i,b) -> if i==rid then (i, cycleBehavior b) else (i,b)) (gameBotConfigs s)
+                                                                                         in rebuild $ s { gameBotConfigs = upd } }
+                 ]
+
+        playButton = UIButton 
+            { buttonPosition = (0, -0.7)
+            , buttonSize     = (0.8, 0.2)
+            , buttonText     = "Jugar"
+            , buttonHandler  = startGame
+            }
+
+        -- Inicia juego a partir de gameBotConfigs
+        startGame :: GameState -> GameState
+        startGame s =
+            let seedBase = gameSeed s
+                stageSize = gameStageSize s
+                bounds = (fst stageSize / 2, snd stageSize / 2)
+                cfgs = if null (gameBotConfigs s)
+                         then [(1, "aggressive")]
+                         else gameBotConfigs s
+                newRobots = Map.fromList
+                    [ (rid, createBasicRobot (generatePositionFromSeed bounds seedBase rid) behavior rid)
+                    | (rid, behavior) <- cfgs ]
+            in s { gameIsInMenu = False, gameRobots = newRobots }

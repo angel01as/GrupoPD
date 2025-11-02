@@ -4,7 +4,10 @@ module Collisions
   ( checkCollision
   , detectRobotProjectileCollisions
   , detectRobotRobotCollisions
+  , detectRobotObstacleCollisions
+  , detectProjectileObstacleCollisions
   , checkCollisions
+  , willCollideNextFrame
   , RobotProjectileCollisionEvent
   , RobotRobotCollisionEvent
   ) where
@@ -13,9 +16,10 @@ import Geometry
   (Scalar2D, Point, Vector
   , dot, sub, perp )
 
-import Entities (Projectile(..), GameEntity (vertices))
+import Entities (Projectile(..), GameEntity (position, vertices, velocity), Obstacle(..))
 import Robot (Robot(..))
 import Data.Maybe
+import Geometry (prodByScalar, translateVertices)
 
 -- Eventos de colisión con type
 type RobotProjectileCollisionEvent = (Projectile, Robot)
@@ -91,3 +95,29 @@ detectRobotRobotCollisions (r:rs) =
 -- checkCollisions: Función principal que coordina todas las comprobaciones de colisión.
 checkCollisions :: [Robot] -> [Projectile] -> ([RobotProjectileCollisionEvent], [RobotRobotCollisionEvent])
 checkCollisions rs ps = (detectRobotProjectileCollisions ps rs, detectRobotRobotCollisions rs)
+
+-- Detección de colisiones Robot–Obstáculo
+detectRobotObstacleCollisions :: [Robot] -> [Obstacle] -> [(Robot, Obstacle, (Float,Float))]
+detectRobotObstacleCollisions rs obs = catMaybes [ collide r o | r <- rs, o <- obs ]
+  where
+    collide r o =
+      if checkCollision (vertices r) (vertices o)
+        then let (rx, ry) = position r
+                 (ox, oy) = obstaclePosition o
+                 vx = rx - ox; vy = ry - oy
+                 m = sqrt (vx*vx + vy*vy)
+                 dir = if m < 1e-6 then (0,0) else (vx/m, vy/m)
+                 push = prodByScalar 0.8 dir
+             in Just (r, o, push)
+        else Nothing
+
+-- Detección de colisiones Proyectil–Obstáculo
+detectProjectileObstacleCollisions :: [Projectile] -> [Obstacle] -> [(Projectile, Obstacle)]
+detectProjectileObstacleCollisions ps obs = catMaybes [ if checkCollision (vertices p) (vertices o) then Just (p,o) else Nothing | p <- ps, o <- obs ]
+
+-- Predicción simple: ¿colisionará un robot con un obstáculo en el próximo frame si avanza con su velocidad actual?
+-- Usa los vértices trasladados por v*dt para hacer un SAT contra el obstáculo.
+willCollideNextFrame :: Robot -> Obstacle -> Float -> Bool
+willCollideNextFrame r o dt =
+  let nextVerts = translateVertices (vertices r) (prodByScalar dt (velocity r))
+  in checkCollision nextVerts (vertices o)

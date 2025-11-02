@@ -121,7 +121,7 @@ updateRobotVelocity r (Rotate angleDif) = setVelocity rotatedRobot rotatedVeloci
     rotatedRobot = (updateOrientation r angleDif) { robotTurret = rotatedTurret }
     rotatedVelocity = rotateVector (velocity r) angleDif
 updateRobotVelocity r (MoveForward speed) = setVelocity r (add2D (velocity r) (prodByScalar speed (angleFactor (orientation r))))
-updateRobotVelocity r (MoveBackward speed) = setVelocity r (subVec (velocity r) (prodByScalar speed (angleFactor (orientation r))))
+updateRobotVelocity r (MoveBackward speed) = setVelocity r (subVec (velocity r) (prodByScalar (speed * 2.0) (angleFactor (orientation r))))
 
 -- ============================================================================
 -- FUNCIONES PARA MANEJAR LA TORRETA

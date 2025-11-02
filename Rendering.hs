@@ -8,6 +8,8 @@ import Geometry
 import qualified Data.Map as Map
 import UIButton
 import WindowSizeState
+import Collisions (willCollideNextFrame)
+import Data.Char (toUpper)
 
 import Numeric (showFFloat)
 import Graphics.Gloss.Juicy (loadJuicy)
@@ -89,8 +91,12 @@ drawGame gs
   | gameDebugInfo gs = Pictures [regularGameInfo, debugGameInfo]
   | otherwise = regularGameInfo
   where
-    regularGameInfo = Pictures [background, robotsPic, projectilesPic, explosionsPic, ui]
-    debugGameInfo = Pictures [createBorder, drawAllVertices]
+    regularGameInfo =
+      let base = Pictures [background, obstaclesPic, robotsPic, projectilesPic, explosionsPic, ui]
+      in case Map.elems (gameRobots gs) of
+           [winner] -> Pictures [base, drawWinnerScreen winner]
+           _        -> base
+    debugGameInfo = Pictures [createBorder, drawAllVertices, drawObstacleDebug, drawPredictedCollisions gs]
     windowSize' = gameWindowSize gs
     (windowWidth, windowHeight) = (fromIntegral (fst windowSize'), fromIntegral (snd windowSize'))
     (baseWindowWidth, baseWindowHeight) = (fromIntegral $ fst baseWindowSize, fromIntegral $ snd baseWindowSize)
@@ -104,6 +110,7 @@ drawGame gs
       Nothing      -> Color (makeColor 0.1 0.1 0.1 1.0) $ rectangleSolid windowWidth windowHeight
     
     robotsPic = Pictures (gmap drawRobot (gameRobots gs))
+    obstaclesPic = Pictures (gmap drawObstacle (gameObstacles gs))
     projectilesPic = Pictures (gmap drawProjectile (gameProjectiles gs))
     explosionsPic = Pictures (gmap drawExplosion (gameExplosions gs))
     ui = drawUI gs
@@ -203,6 +210,38 @@ drawGame gs
          projectileSprite
 
     drawExplosion :: Explosion -> Picture
+    -- Renderiza un obstáculo con estilo simple por tipo
+    drawObstacle :: Obstacle -> Picture
+    drawObstacle o =
+      let (x,y) = obstaclePosition o
+          (sx, sy) = obstacleSize o
+          basePic colorPic = Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Color colorPic $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+          t = gameTime gs
+      in case obstacleType o of
+           Solid  -> basePic (greyN 0.6)
+           Hazard ->
+             let pulse = 0.5 + 0.5 * sin (t*4)
+             in basePic (makeColor 1 0 0 (0.6 + 0.2*pulse))
+           Bomb   ->
+             let blink = 0.5 + 0.5 * sin (t*8)
+                 timerTxt = case obstacleTimer o of
+                              Just tm -> Translate (-10) (-10) $ Scale 0.1 0.1 $ Color black $ Text (show (ceiling tm :: Int))
+                              Nothing -> Blank
+                 box = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
+                       Pictures [ Color (makeColor 1 1 0 (0.6 + 0.3*blink)) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+                                , timerTxt
+                                ]
+             in box
+           Special -> basePic (makeColor 0.2 0.6 1.0 0.5)
+
+    -- Pantalla de ganador superpuesta
+    drawWinnerScreen :: Robot -> Picture
+    drawWinnerScreen r =
+      let (winW, winH) = (fromIntegral (fst (gameWindowSize gs)), fromIntegral (snd (gameWindowSize gs)))
+          overlay = Color (withAlpha 0.4 black) $ rectangleSolid winW winH
+          title = Color white $ Translate (-200) 50 $ Scale 0.4 0.4 $ Text "\127942 ¡GANADOR!"
+          subtitle = Color yellow $ Translate (-220) (-20) $ Scale 0.2 0.2 $ Text ("Tanque " ++ show (robotID r) ++ " - " ++ robotBehavior r)
+      in Pictures [overlay, title, subtitle]
     drawExplosion e = 
         let (x, y) = explosionPosition e
             progress = explosionTime e / explosionMaxTime e
@@ -255,7 +294,7 @@ drawGame gs
     drawAllVertices :: Picture
     drawAllVertices = Pictures vertsDrawings
       where
-        allVertices = concatMap vertices (gameRobots gs) ++ concatMap vertices (gameProjectiles gs)
+        allVertices = concatMap vertices (gameRobots gs) ++ concatMap vertices (gameProjectiles gs) ++ concatMap vertices (gameObstacles gs)
         vertsDrawings = drawVertices allVertices
           where
             drawVertices :: [Point] -> [Picture]
@@ -263,36 +302,75 @@ drawGame gs
             drawVertices (v:vs) = vertDraw:drawVertices vs
               where vertDraw = Color red $ uncurry Translate (toPx v) $ circleSolid (meter2Pixel gs 0.5)
 
+    drawObstacleDebug :: Picture
+    drawObstacleDebug = Pictures (concatMap labelAndWire (Map.elems (gameObstacles gs)))
+      where
+        labelAndWire o =
+          let (ox, oy) = obstaclePosition o
+              (sx, sy) = obstacleSize o
+              label = Translate (meter2Pixel gs ox) (meter2Pixel gs (oy + 2)) $ Scale 0.1 0.1 $ Color white $ Text ("OBST: " ++ show (obstacleID o) ++ " (" ++ show (obstacleType o) ++ ")")
+              wire = Color green $ Translate (meter2Pixel gs ox) (meter2Pixel gs oy) $ rectangleWire (meter2Pixel gs sx) (meter2Pixel gs sy)
+          in [label, wire]
+
     drawMenu :: Picture
-    drawMenu = Pictures [robotNum, debugMode, simulationSpeed, drawButtons]
-        where
-            relative :: Scalar2D -> (Pixel, Pixel) -- Transforma coordenadas y tamaños relativos en píxeles.
-            relative (x, y) = (windowWidth/2 * x, windowHeight/2 * y)
-            -- Escala responsive basada en el tamaño de ventana
-            textScale = min (windowWidth / baseWindowWidth) (windowHeight / baseWindowHeight) * 0.2 
+    drawMenu = Pictures [panel, title, rowsText, hints, drawButtons]
+      where
+        relative :: Scalar2D -> (Pixel, Pixel)
+        relative (x, y) = (windowWidth/2 * x, windowHeight/2 * y)
+        textScale = min (windowWidth / baseWindowWidth) (windowHeight / baseWindowHeight) * 0.2 
 
-            getRowTranslate :: Float -> Float
-            getRowTranslate row = -row*0.25
+        panel = Pictures [ Color (withAlpha 0.6 (greyN 0.2)) $ uncurry Translate (relative (0,0)) $ rectangleSolid (windowWidth*0.8) (windowHeight*0.7)
+                         , Color (withAlpha 0.9 white) $ uncurry Translate (relative (0,0)) $ rectangleWire (windowWidth*0.8) (windowHeight*0.7)
+                         ]
+        title = Color white $ Translate (-300) (windowHeight/2 * 0.3) $ Scale 0.25 0.25 $ Text "CONFIGURACION DE BATALLA"
 
-            drawText :: String -> Float -> Picture
-            drawText txt row = Color black $ (uncurry Translate) (relative (-0.75, getRowTranslate row)) $ Scale textScale textScale $ Text txt
+        drawButtons :: Picture
+        drawButtons = Pictures $ map drawButton (gameButtons gs)
+        
+        drawButton :: UIButton GameState -> Picture
+        drawButton button = (uncurry Translate) (relative (buttonPosition button)) $ 
+          Pictures [ Color (greyN 0.85) $ rectangleSolid rbw rbh
+                  , Color black $ rectangleWire rbw rbh
+                  , Translate (-rbw/5) (-rbh/5) $ Scale textScale textScale $ Text (buttonText button)
+                  ]
+          where
+            (rbw, rbh) = relative (buttonSize button)
 
-            robotNum = drawText ("Numero de robots: " ++ show (gameTotalRobotCount gs)) (-1)
-            debugMode = drawText ("Velocidad de simulacion: " ++ showFFloat (Just 1) (gameSimulationSpeed gs) "") 0 -- showFFloat sirve para mostrar un número determinado de decimales y opcionalmente un sufijo.
-            simulationSpeed = drawText ("Activar modo debug: " ++  if gameDebugInfo gs then "Si" else "No") 1
+        -- Texto de filas: "Tanque i: <tipo>"
+        rowsText = Pictures $ zipWith drawRow [0..] (gameBotConfigs gs)
+          where
+            drawRow :: Int -> (Int, String) -> Picture
+            drawRow idx (rid, beh) =
+              let n = max 1 (length (gameBotConfigs gs))
+                  spacing = 0.6 / fromIntegral n  -- relativo, reparte filas en 60% del panel
+                  yTop = 0.2
+                  y = yTop - fromIntegral idx * spacing
+                  baseX = 0
+                  label = case beh of
+                            "aggressive" -> "Agresivo"
+                            "defensive"  -> "Defensivo"
+                            "sniper"     -> "Francotirador"
+                            _             -> capitalize beh
+              in Color white $ (uncurry Translate) (relative (baseX, y)) $ Scale (textScale*0.8) (textScale*0.8) $
+                   Text ("Tanque " ++ show rid ++ ":  " ++ label)
 
-            drawButtons :: Picture
-            drawButtons = Pictures $ map drawButton (gameButtons gs)
-            
-            drawButton :: UIButton GameState -> Picture
-            drawButton button = (uncurry Translate) (relative (buttonPosition button)) $ 
-                Pictures [
-                            Color (greyN 0.85) $ rectangleSolid rbw rbh,
-                            Color black $ rectangleWire rbw rbh,
-                            Translate (-rbw/5) (-rbh/5) $ Scale textScale textScale $ Text (buttonText button) -- No está perfectamente ajustado
-                        ]
-                where
-                    (rbw, rbh) = relative (buttonSize button)
+            capitalize [] = []
+            capitalize (c:cs) = toEnum (fromEnum (toUpper c)) : cs
+
+        hints = Color (greyN 0.8) $ Translate (-250) (-windowHeight/2 * 0.25) $ Scale 0.15 0.15 $ Text "Usa < y > para cambiar tipo. Click JUGAR para iniciar."
+
+    -- Líneas azules semitransparentes entre robots que colisionarán y el obstáculo implicado
+    drawPredictedCollisions :: GameState -> Picture
+    drawPredictedCollisions s =
+      let pairs = [ (r, o)
+                  | r <- Map.elems (gameRobots s)
+                  , o <- Map.elems (gameObstacles s)
+                  , willCollideNextFrame r o 0.3
+                  ]
+          toPx (x,y) = (meter2Pixel s x, meter2Pixel s y)
+          linesPics = [ Color (makeColor 0 0 1 0.3) $ Line [toPx (position r), toPx (obstaclePosition o)]
+                      | (r,o) <- pairs]
+      in Pictures linesPics
 
 
             
