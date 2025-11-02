@@ -200,7 +200,7 @@ makeButtons gs =
                 newRobots = Map.fromList (generateRobotsSequentially cfgs [])
                 
                 -- PASO 2: Ahora generar obstáculos verificando posiciones de robots
-                robotPositions = [position r | (_, r) <- Map.toList newRobots]
+                robotPositions = [robotPosition r | (_, r) <- Map.toList newRobots]
                 newObstaclesList = generateRandomObstaclesWithRobots stageSize (realToFrac seedBase) robotPositions
                 newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
                 
