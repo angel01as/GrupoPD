@@ -616,7 +616,7 @@ avoidObstacleSmartImmediate gs r =
              altSign = if length imminent > 1 && (gameFrame gs + robotID r) `mod` 2 == 0 then (-1) else 1 :: Int
              turn = fromIntegral altSign * baseTurn
              stopped = setVelocity r (0,0)
-             backed  = updateRobotVelocity stopped (MoveBackward 1.5)
+             backed  = updateRobotVelocity stopped (MoveBackward 0.8)
              rotated = updateRobotVelocity backed (Rotate turn)
          in rotated
 

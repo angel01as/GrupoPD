@@ -1,7 +1,7 @@
 import Game (playGame, generateRandomObstacles, generateRandomObstaclesWithRobots)
 import Robot (createBasicRobot, Robot(..))
 import GameState
-import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
 import Entities (Obstacle(..))
 
 import qualified Data.Map as Map (Map, fromList, insert, empty, toList)
@@ -200,7 +200,7 @@ makeButtons gs =
                 newRobots = Map.fromList (generateRobotsSequentially cfgs [])
                 
                 -- PASO 2: Ahora generar obstáculos verificando posiciones de robots
-                robotPositions = [robotPosition r | (_, r) <- Map.toList newRobots]
+                robotPositions = [position r | (_, r) <- Map.toList newRobots]
                 newObstaclesList = generateRandomObstaclesWithRobots stageSize (realToFrac seedBase) robotPositions
                 newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
                 

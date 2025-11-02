@@ -121,6 +121,10 @@ updateRobotVelocity r (Rotate angleDif) = setVelocity rotatedRobot rotatedVeloci
     rotatedRobot = (updateOrientation r angleDif) { robotTurret = rotatedTurret }
     rotatedVelocity = rotateVector (velocity r) angleDif
 updateRobotVelocity r (MoveForward speed) = setVelocity r (add2D (velocity r) (prodByScalar speed (angleFactor (orientation r))))
+<<<<<<< HEAD
+=======
+-- Retroceso más suave: antes era speed * 2.0, lo reducimos para evitar aceleraciones excesivas
+>>>>>>> 7a0968dd54c76ff67bd780acd72dd0ff44e30b9a
 updateRobotVelocity r (MoveBackward speed) = setVelocity r (subVec (velocity r) (prodByScalar (speed * 1.2) (angleFactor (orientation r))))
 
 -- ============================================================================

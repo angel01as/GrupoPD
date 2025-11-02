@@ -10,12 +10,16 @@
 module RandomUtils (
   generatePositionFromSeed,
   generateAllRobotPositions,
-  generateSafeRobotPosition
+  generateSafeRobotPosition,
+  generateNonOverlappingObstacles
 ) where
 
-import Entities (Obstacle(..))
+import Entities (Obstacle(..), ObstacleType(..), ObstacleShape(..))
+import Geometry (Size, Position, add2D)
+import Robot (Robot(..))
 import Data.List (find)
 import Data.Maybe (fromMaybe)
+import qualified Data.Map as Map
 
 -- Genera una posición aleatoria basándose en una semilla 
 -- Esta función NO usa IO, por lo que puede usarse tanto al inicio como al resetear
@@ -75,4 +79,69 @@ generateSafeRobotPosition bounds seedBase robotID obstacles =
           (rw, rh) = (6, 6) -- tamaño del robot actualizado a (6, 6)
           (ow, oh) = obstacleSize o
       in abs (x - ox) < (rw + ow) / 2 && abs (y - oy) < (rh + oh) / 2
+
+-- Verificación AABB simple
+overlaps :: (Float,Float) -> (Float,Float) -> (Float,Float) -> (Float,Float) -> Bool
+overlaps (x1,y1) (sx1,sy1) (x2,y2) (sx2,sy2) =
+  abs (x1 - x2) < (sx1 + sx2)/2 && abs (y1 - y2) < (sy1 + sy2)/2
+
+-- Genera obstáculos aleatorios evitando solapar robots y otros obstáculos ya colocados.
+-- Intenta recolocar hasta 500 veces por obstáculo; si no cabe, lo omite.
+generateNonOverlappingObstacles :: Size -> Float -> [Robot] -> [Obstacle]
+generateNonOverlappingObstacles (w,h) seed robots = take 4 $ go [] ids
+  where
+    bounds = (w/2, h/2)
+    ids = [1001..]
+    -- Probabilidad por tipo tal como en Game.generateRandomObstacles
+    pickType rid = let p = frac (sin (seed*0.73 + fromIntegral rid*12.3) * 43758.5453)
+                   in if p < 0.05 then Solid else if p < 0.20 then Hazard else if p < 0.40 then Bomb else Special
+    frac x = x - fromIntegral (floor x :: Int)
+
+    go acc (rid:rest)
+      | length acc >= 4 = acc
+      | otherwise =
+          case tryPlace acc rid 0 of
+            Just o  -> go (acc ++ [o]) rest
+            Nothing -> go acc rest
+
+    tryPlace acc rid k
+      | k > 500 = Nothing
+      | otherwise =
+          let pos = generatePositionFromSeed bounds (realToFrac seed + fromIntegral k * 0.03) rid
+              t = pickType rid
+              (shape, sz, col) = case t of
+                Solid  -> (Square, (8,8), 0)
+                Hazard -> (Circle, (6,6), 0)
+                Bomb   -> (Square, (4,4), 0)
+                Special-> (Polygon (regularPolygonVerts 8 3.0), (6,6), 0)
+              localVerts = case shape of
+                Square -> let (sx, sy) = sz in [(-sx/2,-sy/2),(sx/2,-sy/2),(sx/2,sy/2),(-sx/2,sy/2)]
+                Circle -> circleApproxVerts (fst sz / 2) 16
+                Polygon pts -> pts
+              worldVerts = map (add2D pos) localVerts
+              candidate = Obs { obstacleID = rid
+                               , obstacleType = t
+                               , obstacleShape = shape
+                               , obstaclePosition = pos
+                               , obstacleVertices = worldVerts
+                               , obstacleSize = sz
+                               , obstacleOrientation = 0
+                               , obstacleHealth = 100
+                               , obstacleTimer = Nothing
+                               , obstacleColor = undefined -- color no usado aquí; lo decide Rendering
+                               }
+          in if collidesAny pos sz robots acc
+               then tryPlace acc rid (k+1)
+               else Just candidate
+
+    -- Chequear contra robots y obstáculos ya aceptados
+    collidesAny (x,y) sz robots' obstacles' =
+      let robotOverlap = any (\r -> overlaps (x,y) sz (robotPosition r) (robotSize r)) robots'
+          obsOverlap   = any (\o -> overlaps (x,y) sz (obstaclePosition o) (obstacleSize o)) obstacles'
+      in robotOverlap || obsOverlap
+
+    circleApproxVerts r n = [ (r * cos (theta i), r * sin (theta i)) | i <- [0..n-1] ]
+      where theta i = 2*pi*fromIntegral i / fromIntegral n
+    regularPolygonVerts n r = [ (r * cos (theta i), r * sin (theta i)) | i <- [0..n-1] ]
+      where theta i = 2*pi*fromIntegral i / fromIntegral n
 

@@ -17,7 +17,7 @@ import qualified Entities as E
 import qualified AI
 import GameState
 import Rendering (drawGame)
-import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
 import Collisions (checkCollisions, checkCollision, detectRobotObstacleCollisions, detectProjectileObstacleCollisions, willCollideNextFrame, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
 import Geometry (add2D, prodByScalar, translateVertices)
 import UIButton (UIButton(..))
@@ -48,14 +48,14 @@ regenerateRobotsWithRandomPositions currentState initialState =
     originalRobots = Map.elems (gameRobots initialState)
     robotInfos = [(robotID r, robotBehavior r) | r <- originalRobots]
 
-    obstaclesList = Map.elems newObstacles
+    -- 1) Reposicionar robots de forma determinista (sin depender de obstáculos)
     newRobots = Map.fromList
-      [ (rid, createBasicRobot (generateSafeRobotPosition bounds seedBase rid obstaclesList) behavior rid)
+      [ (rid, createBasicRobot (generateSafeRobotPosition bounds seedBase rid []) behavior rid)
         | (rid, behavior) <- robotInfos
       ]
 
-    -- Obstáculos deterministas básicos al reset (10 unidades)
-    newObstacles = Map.fromList [ (obstacleID o, o) | o <- generateRandomObstacles stageSize' (realToFrac seedBase) ]
+    -- 2) Generar obstáculos evitando solapar robots ni entre ellos
+    newObstacles = Map.fromList [ (obstacleID o, o) | o <- generateNonOverlappingObstacles stageSize' (realToFrac seedBase) (Map.elems newRobots) ]
 
 playGame :: GameState -> IO ()
 playGame initialState = play window backgroundColor fps initialState drawGame (handleEvents [tryHandleResizing, tryHandleMouse, tryHandleKeys]) preUpdateGame
