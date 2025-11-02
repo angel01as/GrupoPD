@@ -304,7 +304,8 @@ updateGame dt oldState = finalState
 
     -- Explosiones existentes afectan a entidades
     maxTime = 1 :: Float
-    maxRadius = 5 :: Float
+    maxRadiusProj = 5 :: Float
+    maxRadiusMine = 30 :: Float
     explDamage = 30 :: Float
 
     applyExplosions :: [Explosion] -> GameState -> GameState
@@ -350,7 +351,7 @@ updateGame dt oldState = finalState
                   , gameTotalExplosionCount = totalExplosionCount + 1
                   }
                 newID = totalExplosionCount
-                newExpl = createExplosion (position p) maxRadius explDamage maxTime newID
+                newExpl = createExplosion (position p) maxRadiusProj explDamage maxTime newID
 
     -- Proyectil–Robot
     applyRobotProjectileCollisions :: [RobotProjectileCollisionEvent] -> GameState -> GameState
@@ -372,7 +373,7 @@ updateGame dt oldState = finalState
           where
             updatedR = r { robotEnergy = robotEnergy r - projectileDamage p }
         newID = totalExplosionCount
-        newExpl = createExplosion (position p) maxRadius explDamage maxTime newID
+        newExpl = createExplosion (position p) maxRadiusProj explDamage maxTime newID
 
     -- Robot–Robot (solo daño cruzado sencillo)
     applyRobotRobotCollisions :: [RobotRobotCollisionEvent] -> GameState -> GameState
@@ -445,7 +446,7 @@ updateGame dt oldState = finalState
                                         then trace ("Energía: " ++ show energiaBefore ++ " -> " ++ show energiaAfter)
                                         else id
                           -- Crear efecto de colisión IGUAL que cuando impacta un proyectil
-                          collisionEffect = createExplosion (obstaclePosition o) maxRadius explDamage maxTime (gameTotalExplosionCount acc)
+                          collisionEffect = createExplosion (obstaclePosition o) maxRadiusProj explDamage maxTime (gameTotalExplosionCount acc)
                           newExplosions = Map.insert (gameTotalExplosionCount acc) collisionEffect (gameExplosions acc)
                       in debugEnergy $ if isRobotAlive updatedRobot
                          then acc { gameRobots = Map.insert (robotID r) updatedRobot (gameRobots acc)
@@ -509,7 +510,7 @@ updateGame dt oldState = finalState
             mkExplosion acc (_, ob) =
               let totalE = gameTotalExplosionCount acc
                   eid = totalE
-                  expl = createExplosion (obstaclePosition ob) 10 40 0.8 eid
+                  expl = createExplosion (obstaclePosition ob) maxRadiusMine 40 0.8 eid
               in acc { gameExplosions = Map.insert eid expl (gameExplosions acc)
                      , gameTotalExplosionCount = totalE + 1 }
 
