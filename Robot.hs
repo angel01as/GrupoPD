@@ -166,18 +166,18 @@ createBasicRobot :: Position -> String -> ID -> Robot
 createBasicRobot pos behaviorName newID = Rob
   { robotPosition = pos
   , robotVelocity = (0, 0)
-  , robotSize = (8, 8)
-  , robotVertices = map (add2D pos) [(-4, -4), (4, -4), (4, 4), (-4, 4)]
+  , robotSize = (5, 5)
+  , robotVertices = map (add2D pos) [(-2.5, -2.5), (2.5, -2.5), (2.5, 2.5), (-2.5, 2.5)]
   , robotEnergy = 100
   , robotMaxEnergy = 100
-  , robotRadarRange = 35
+  , robotRadarRange = 28
   , robotOrientation = 0
   , robotTurret = Turr
     { turretOrientation = 0
     , turretCooldown = 0
     , turretMaxCooldown = 1.0
     , turretDamage = 20
-    , turretRange = 30
+    , turretRange = 26
     }
   , robotMemory = Map.empty
   , robotBehavior = behaviorName
