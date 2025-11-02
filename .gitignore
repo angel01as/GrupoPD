@@ -1,0 +1,22 @@
+# Archivos de compilación de Haskell
+*.hi
+*.o
+*.exe
+
+# Archivos de Cabal/Stack
+dist/
+dist-newstyle/
+.stack-work/
+cabal.project.local
+.ghc.environment.*
+
+# Archivos del editor
+.vscode/
+*.swp
+*.swo
+*~
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+

@@ -72,7 +72,7 @@ generateSafeRobotPosition bounds seedBase robotID obstacles =
     collidesWithObstacle :: (Float, Float) -> Obstacle -> Bool
     collidesWithObstacle (x,y) o =
       let (ox,oy) = obstaclePosition o
-          (rw, rh) = (5,5) -- tamaño aproximado del robot
+          (rw, rh) = (6, 6) -- tamaño del robot actualizado a (6, 6)
           (ow, oh) = obstacleSize o
       in abs (x - ox) < (rw + ow) / 2 && abs (y - oy) < (rh + oh) / 2
 

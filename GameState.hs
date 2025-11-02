@@ -55,7 +55,7 @@ instance Default GameState where
       gameTotalRobotCount = 0,
       gameTotalProjectileCount = 0,
       gameTotalExplosionCount = 0,
-      gameSimulationSpeed = 1,
+      gameSimulationSpeed = 1.5,  -- Aumentado de 1 a 1.5 para más velocidad
       gameDebugInfo = False,
       gamePaused = False,
       gameButtons = [],

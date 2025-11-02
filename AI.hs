@@ -265,11 +265,9 @@ decideInstruction (Sequence instructions) gs robot =  -- Se vuelve a llamar porq
 -- Bot agresivo que busca enemigos y los ataca de frente
 aggressiveBot :: BotBehavior
 aggressiveBot gs robot =
-  -- 1) Evitar obstáculo; 2) Evitar borde
-  ifThenElse isNearObstacle
-    (avoidObstacleSmart gs robot)
-    (ifThenElse isNearMapEdgeCondition
-      (avoidEdgeSmart gs robot)
+  -- Solo evitar borde (los obstáculos se manejan por colisión física)
+  ifThenElse isNearMapEdgeCondition
+    (avoidEdgeSmart gs robot)
     (
       let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
           hasEnemy = enemy /= robot
@@ -297,7 +295,7 @@ aggressiveBot gs robot =
              (ifThenElse (BoolCondition needAdvance)
                 (sequence [ rotate bodyStep, move 0.9 ])
                 (ifThenElse (BoolCondition needRetreat)
-                   (sequence [ rotate bodyStep, moveBackward 0.7 ])
+                   (sequence [ rotate bodyStep, moveBackward 0.3 ])  -- Reducido de 0.7 a 0.3
                    (sequence [ rotate bodyStep ])
                 )
              ),
@@ -311,15 +309,14 @@ aggressiveBot gs robot =
            rotate (pi/24),
            wait 0.15
          ]
-    ))
+    )
 
 -- Bot francotirador que mantiene distancia y dispara con precisión
 sniperBot :: BotBehavior
 sniperBot gs robot =
-  ifThenElse isNearObstacle
-    (avoidObstacleSmart gs robot)
-    (ifThenElse isNearMapEdgeCondition
-      (avoidEdgeSmart gs robot)
+  -- Solo evitar borde (los obstáculos se manejan por colisión física)
+  ifThenElse isNearMapEdgeCondition
+    (avoidEdgeSmart gs robot)
     (
       let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
           hasEnemy = enemy /= robot
@@ -334,7 +331,7 @@ sniperBot gs robot =
            ifThenElse (BoolCondition (distToEnemy > optimal + 3))
              (move 0.25)
              (ifThenElse (BoolCondition (distToEnemy < optimal - 3))
-                (moveBackward 0.35)
+                (moveBackward 0.2)  -- Reducido de 0.35 a 0.2
                 (Simple DoNothingCommand)
              ),
            ifThen (BoolCondition turretAligned) shoot,
@@ -345,15 +342,14 @@ sniperBot gs robot =
            rotateTurret (fst (adjustTurretAngle "sniper" gs robot)),
            wait 0.25
          ]
-    ))
+    )
 
 -- Bot defensivo que se protege y calcula sus movimientos
 defensiveBot :: BotBehavior
 defensiveBot gs robot =
-  ifThenElse isNearObstacle
-    (avoidObstacleSmart gs robot)
-    (ifThenElse isNearMapEdgeCondition
-      (avoidEdgeSmart gs robot)
+  -- Solo evitar borde (los obstáculos se manejan por colisión física)
+  ifThenElse isNearMapEdgeCondition
+    (avoidEdgeSmart gs robot)
     (
       let enemy = fromMaybe robot (findNearestEnemy robot (gameRobots gs))
           hasEnemy = enemy /= robot
@@ -375,7 +371,7 @@ defensiveBot gs robot =
            rotateTurret turretStep,
            ifThen (BoolCondition turretAligned) shoot,
            ifThenElse (BoolCondition (distToEnemy < safeMin))
-             (sequence [ rotate faceStep, moveBackward 0.6 ])
+             (sequence [ rotate faceStep, moveBackward 0.25 ])  -- Reducido de 0.6 a 0.25
              (ifThenElse (BoolCondition (distToEnemy > safeMax))
                 (sequence [ rotate faceStep, move 0.5 ])
                 (sequence [ rotate bodyStep, move 0.5 ])
@@ -389,7 +385,7 @@ defensiveBot gs robot =
            rotateTurret (fst (adjustTurretAngle "defensive" gs robot)),
            wait 0.2
          ]
-    ))
+    )
 
 -- (definida más abajo con una versión robusta)
 
@@ -590,18 +586,18 @@ avoidEdgeSmart gs r =
   let (frontNear, backNear) = edgeSensors gs r
       turn = safeRandomTurn gs r (30, 60)
   in if frontNear && backNear then
-       sequence [ moveBackward 0.7, rotate turn, wait 0.15, move 0.6 ]
+       sequence [ moveBackward 0.2, rotate turn, wait 0.15, move 0.2 ]  -- Reducido para movimiento más natural
      else if frontNear then
-       sequence [ moveBackward 0.5, rotate turn, wait 0.10 ]
+       sequence [ moveBackward 0.15, rotate turn, wait 0.10 ]  -- Reducido de 0.5 a 0.15
      else if backNear then
-       sequence [ move 0.5, rotate turn, wait 0.10 ]
+       sequence [ move 0.15, rotate turn, wait 0.10 ]  -- Reducido de 0.5 a 0.15
      else Simple DoNothingCommand
 
 -- Evitación de obstáculos: giro corto + pequeña retirada
 avoidObstacleSmart :: GameState -> Robot -> BotInstruction
 avoidObstacleSmart gs r =
   let turn = safeRandomTurn gs r (75, 105)
-  in sequence [ moveBackward 0.5, rotate turn, wait 0.1 ]
+  in sequence [ moveBackward 0.15, rotate turn, wait 0.1 ]  -- Reducido de 0.5 a 0.15 para movimiento más suave
 
 -- Versión inmediata usada por el bucle del juego antes de aplicar la IA:
 -- si una colisión con obstáculo es inminente, frena, retrocede rápido y gira inteligentemente.
