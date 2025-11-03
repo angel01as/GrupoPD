@@ -234,7 +234,7 @@ drawGame gs
            Bomb ->
              let blink = 0.5 + 0.5 * sin (t*8)
                  timerTxt = case obstacleTimer o of
-                              Just tm -> Translate (-10) (-10) $ Scale 0.1 0.1 $ Color black $ Text (show (ceiling tm :: Int))
+                              Just tm -> Translate (-10) (-10) $ Scale 0.1 0.1 $ Color white $ Text (show (ceiling tm :: Int))
                               Nothing -> Blank
                  texture = case Map.lookup mineObstaclePath (gameImages gs) of
                             Just img -> Scale 0.05 0.05 img

@@ -510,7 +510,8 @@ updateGame dt oldState = finalState
             mkExplosion acc (_, ob) =
               let totalE = gameTotalExplosionCount acc
                   eid = totalE
-                  expl = createExplosion (obstaclePosition ob) maxRadiusMine 40 0.8 eid
+                  bombDamage = 60 :: Float  -- Aumentado de 40 a 60
+                  expl = createExplosion (obstaclePosition ob) maxRadiusMine bombDamage 0.8 eid
               in acc { gameExplosions = Map.insert eid expl (gameExplosions acc)
                      , gameTotalExplosionCount = totalE + 1 }
 
