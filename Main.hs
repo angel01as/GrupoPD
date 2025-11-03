@@ -149,19 +149,23 @@ makeButtons gs =
         rowButtons :: (Int, (Int, String)) -> [UIButton GameState]
         rowButtons (idx, (rid, beh)) =
             let n = max 1 (length (gameBotConfigs gs))
-                spacing = 0.6 / fromIntegral n
-                yTop = 0.2
+                -- Usar el mismo cálculo de espaciado que en Rendering.hs
+                maxSpacing = 0.50 / fromIntegral (max 3 n)
+                minSpacing = 0.12
+                spacing = max minSpacing maxSpacing
+                yTop = 0.12
                 y = yTop - fromIntegral idx * spacing
-            in [ UIButton { buttonPosition = (-0.15, y), buttonSize = (0.08, 0.10), buttonText = "<"
+                -- Botones completamente a la derecha del panel, agrupados juntos
+            in [ UIButton { buttonPosition = (0.28, y), buttonSize = (0.08, 0.10), buttonText = "<"
                                         , buttonHandler = \s -> let upd = map (\(i,b) -> if i==rid then (i, cycleBehaviorPrev b) else (i,b)) (gameBotConfigs s)
                                                                                          in rebuild $ s { gameBotConfigs = upd } }
-                 , UIButton { buttonPosition = (0.15, y), buttonSize = (0.08, 0.10), buttonText = ">"
+                 , UIButton { buttonPosition = (0.38, y), buttonSize = (0.08, 0.10), buttonText = ">"
                                         , buttonHandler = \s -> let upd = map (\(i,b) -> if i==rid then (i, cycleBehavior b) else (i,b)) (gameBotConfigs s)
                                                                                          in rebuild $ s { gameBotConfigs = upd } }
                  ]
 
         playButton = UIButton 
-            { buttonPosition = (0, -0.7)
+            { buttonPosition = (0, -0.65)  -- Movido un poco hacia arriba
             , buttonSize     = (0.8, 0.2)
             , buttonText     = "Jugar"
             , buttonHandler  = startGame
