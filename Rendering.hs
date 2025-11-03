@@ -319,10 +319,10 @@ drawGame gs
         relative (x, y) = (windowWidth/2 * x, windowHeight/2 * y)
         textScale = min (windowWidth / 1000) (windowHeight / 700) * 0.25
 
-        panel = Pictures [ Color (withAlpha 0.6 (greyN 0.2)) $ uncurry Translate (relative (0,0)) $ rectangleSolid (windowWidth*0.75) (windowHeight*0.65)
-                         , Color (withAlpha 0.9 white) $ uncurry Translate (relative (0,0)) $ rectangleWire (windowWidth*0.75) (windowHeight*0.65)
+        panel = Pictures [ Color (withAlpha 0.6 (greyN 0.2)) $ uncurry Translate (relative (0,0)) $ rectangleSolid (windowWidth*0.75) (windowHeight*0.75)
+                         , Color (withAlpha 0.9 white) $ uncurry Translate (relative (0,0)) $ rectangleWire (windowWidth*0.75) (windowHeight*0.75)
                          ]
-        title = Color white $ (uncurry Translate) (relative (-0.28, 0.28)) $ Scale (textScale*1.2) (textScale*1.2) $ Text "CONFIGURACION DE BATALLA"
+        title = Color white $ (uncurry Translate) (relative (-0.25, 0.32)) $ Scale (textScale*1.1) (textScale*1.1) $ Text "CONFIGURACION DE BATALLA"
 
         drawButtons :: Picture
         drawButtons = Pictures $ map drawButton (gameButtons gs)
@@ -336,17 +336,20 @@ drawGame gs
               where
                 (rbw, rbh) = relative (buttonSize button)
 
-        -- Pista inferior
-        hints = (uncurry Translate) (relative (-0.22, -0.24)) $ Scale (textScale*0.7) (textScale*0.7) $ Color (greyN 0.8) $ Text "Usa < y > para cambiar tipo. Click JUGAR para iniciar."
+        -- Pista inferior - movida más abajo y a la izquierda para que salga del panel
+        hints = (uncurry Translate) (relative (-0.38, -0.40)) $ Scale (textScale*0.65) (textScale*0.65) $ Color (greyN 0.75) $ Text "Usa < y > para cambiar tipo. Click JUGAR para iniciar."
 
-        -- Texto de filas: "Tanque i: <tipo>"
+        -- Texto de filas: "Tanque i: <tipo>" - mejor espaciado y posiciones
         rowsText = Pictures $ zipWith drawRow [0..] (gameBotConfigs gs)
           where
             drawRow :: Int -> (Int, String) -> Picture
             drawRow idx (rid, beh) =
               let n = max 1 (length (gameBotConfigs gs))
-                  spacing = 0.6 / fromIntegral n  -- relativo, reparte filas en 60% del panel
-                  yTop = 0.2
+                  -- Aumentar espaciado: usar más espacio vertical y mínimo entre filas
+                  maxSpacing = 0.50 / fromIntegral (max 3 n)  -- Espaciado máximo entre filas
+                  minSpacing = 0.12  -- Espaciado mínimo para evitar solapamiento
+                  spacing = max minSpacing maxSpacing
+                  yTop = 0.12  -- Empezar más abajo para dar más espacio
                   y = yTop - fromIntegral idx * spacing
                   labelTxt = "Tanque " ++ show rid ++ ":"
                   behTxt = case beh of
@@ -354,8 +357,17 @@ drawGame gs
                             "defensive"  -> "Defensivo"
                             "sniper"     -> "Francotirador"
                             _             -> capitalize beh
-                  leftCol = (uncurry Translate) (relative (-0.35, y)) $ Scale (textScale*0.85) (textScale*0.85) $ Color white $ Text labelTxt
-                  centerCol = (uncurry Translate) (relative (0.0, y)) $ Scale (textScale*0.9) (textScale*0.9) $ Color white $ Text behTxt
+                  -- Calcular offset vertical para centrar texto con los botones
+                  -- Los botones tienen altura 0.10 (relativo), el texto se renderiza desde su línea base
+                  -- Necesitamos subir el texto aproximadamente la mitad de su altura de línea para centrarlo
+                  buttonHeightPx = windowHeight/2 * 0.10  -- Altura del botón en píxeles
+                  textLineHeight = textScale * 0.85 * 25  -- Altura estimada de una línea de texto
+                  textOffsetY = textLineHeight * 0.4  -- Subir texto para alinearlo con centro del botón
+                  -- Layout: "Tanque X: Tipo" juntos a la izquierda, botones completamente a la derecha
+                  leftCol = Translate (fst (relative (-0.40, y))) (snd (relative (-0.40, y)) + textOffsetY) $ 
+                            Scale (textScale*0.85) (textScale*0.85) $ Color white $ Text labelTxt
+                  centerCol = Translate (fst (relative (-0.10, y))) (snd (relative (-0.10, y)) + textOffsetY) $ 
+                              Scale (textScale*0.9) (textScale*0.9) $ Color white $ Text behTxt
               in Pictures [leftCol, centerCol]
 
             capitalize [] = []
