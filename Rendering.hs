@@ -44,11 +44,17 @@ robotDeathSprite2Path = "images/deathEffect/death_effect2.png"
 robotDeathSprite3Path = "images/deathEffect/death_effect3.png"
 robotDeathSprite4Path = "images/deathEffect/death_effect4.png"
 
+solidObstaclePath = "images/obstacles/ruin1.png"
+hazardObstaclePath = "images/obstacles/hazard.png"
+mineObstaclePath = "images/obstacles/mine.png"
+
+
 usedImages = [backgroundImagePath, aggressiveBotBodyPath, defensiveBotBodyPath, sniperBotBodyPath,
               aggressiveBotTurretPath, defensiveBotTurretPath, sniperBotTurretPath, projectileImagePath,
               explosionSprite1Path, explosionSprite2Path, explosionSprite3Path, explosionSprite4Path,
               collisionSprite1Path, collisionSprite2Path, collisionSprite3Path,
-              robotDeathSprite1Path, robotDeathSprite2Path, robotDeathSprite3Path, robotDeathSprite4Path]
+              robotDeathSprite1Path, robotDeathSprite2Path, robotDeathSprite3Path, robotDeathSprite4Path,
+              solidObstaclePath, hazardObstaclePath, mineObstaclePath]
 
 -- gmap es un fmap sobre un Map que devuelve el resultado como lista.
 gmap :: (Ord k) => (v -> w) -> Map.Map k v -> [w]
@@ -218,19 +224,23 @@ drawGame gs
           basePic colorPic = Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Color colorPic $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
           t = gameTime gs
       in case obstacleType o of
-           Solid  -> basePic (greyN 0.6)
-           Hazard ->
-             let pulse = 0.5 + 0.5 * sin (t*4)
-             in basePic (makeColor 1 0 0 (0.6 + 0.2*pulse))
-           Bomb   ->
+           Solid -> case Map.lookup solidObstaclePath (gameImages gs) of 
+                      Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale 0.11 0.11 img
+                      Nothing -> basePic (greyN 0.6)
+           Hazard -> case Map.lookup hazardObstaclePath (gameImages gs) of
+                      Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale 0.07 0.07 img
+                      Nothing -> let pulse = 0.5 + 0.5 * sin (t*4)
+                                 in basePic (makeColor 1 0 0 (0.6 + 0.2*pulse))
+           Bomb ->
              let blink = 0.5 + 0.5 * sin (t*8)
                  timerTxt = case obstacleTimer o of
                               Just tm -> Translate (-10) (-10) $ Scale 0.1 0.1 $ Color black $ Text (show (ceiling tm :: Int))
                               Nothing -> Blank
+                 texture = case Map.lookup mineObstaclePath (gameImages gs) of
+                            Just img -> Scale 0.05 0.05 img
+                            Nothing -> Color (makeColor 1 1 0 (0.6 + 0.3*blink)) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
                  box = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
-                       Pictures [ Color (makeColor 1 1 0 (0.6 + 0.3*blink)) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
-                                , timerTxt
-                                ]
+                       Pictures [ texture, timerTxt]
              in box
            Special -> basePic (makeColor 0.2 0.6 1.0 0.5)
 
