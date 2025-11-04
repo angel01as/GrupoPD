@@ -127,7 +127,13 @@ generateRandomObstaclesWithRobots (w,h) seed robotPositions = generateObstaclesS
     tryMkObs attempt rid existingObstaclePositions
       | attempt >= 100 = Nothing  -- Fallback: si después de 100 intentos no encuentra posición, no genera el obstáculo
       | otherwise =
-          let pos = generatePositionFromSeed bounds (realToFrac seed + fromIntegral attempt * 0.0731) rid
+          -- Generador 2D hash-based independiente para romper patrones en diagonal
+          -- Dos hashes distintos para X e Y en [0,1)
+          let frac' x = x - fromIntegral (floor x :: Int)
+              u = realToFrac $ frac' (sin (seed*0.873 + fromIntegral rid*12.9898 + fromIntegral attempt*78.233) * 43758.5453)
+              v = realToFrac $ frac' (sin (seed*1.327 + fromIntegral rid*4.1234  + fromIntegral attempt*93.733) * 15731.7431)
+              (bx,by) = bounds
+              pos = ((u*2-1)*bx, (v*2-1)*by)
               tooCloseToRobot = any (\robotPos -> distanceBetween pos robotPos < minDistanceToRobot) robotPositions
               tooCloseToObstacle = any (\obstaclePos -> distanceBetween pos obstaclePos < minDistanceBetweenObstacles) existingObstaclePositions
           in if tooCloseToRobot || tooCloseToObstacle
@@ -510,7 +516,7 @@ updateGame dt oldState = finalState
             mkExplosion acc (_, ob) =
               let totalE = gameTotalExplosionCount acc
                   eid = totalE
-                  bombDamage = 60 :: Float  -- Aumentado de 40 a 60
+                  bombDamage = 80 :: Float  -- Aumentado de 60 a 80
                   expl = createExplosion (obstaclePosition ob) maxRadiusMine bombDamage 0.8 eid
               in acc { gameExplosions = Map.insert eid expl (gameExplosions acc)
                      , gameTotalExplosionCount = totalE + 1 }

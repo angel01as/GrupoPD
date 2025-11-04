@@ -15,7 +15,7 @@ import Numeric (showFFloat)
 import Graphics.Gloss.Juicy (loadJuicy)
 
 -- Rutas a imágenes
-backgroundImagePath = "images/background.png"
+backgroundImagePath = "images/background2.jpg"
 
 aggressiveBotBodyPath = "images/aggressiveBot/robot_body.png"
 defensiveBotBodyPath = "images/defensiveBot/robot_body.png"
