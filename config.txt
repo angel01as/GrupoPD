@@ -1,0 +1,3 @@
+bots: aggressive,defensive,sniper
+stage: 200x140
+tournaments: 3

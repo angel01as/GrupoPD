@@ -12,6 +12,8 @@ import Graphics.Gloss(Picture)
 import Graphics.Gloss.Juicy(loadJuicy)
 
 import Rendering(usedImages)
+import Torneos (parseConfig)
+import System.IO.Unsafe (unsafePerformIO)
 import Data.Default
 import UIButton
 
@@ -116,7 +118,7 @@ makeButtons gs =
     concat
         [ [decCountBtn, incCountBtn]
         , concatMap rowButtons (zip [0..] (gameBotConfigs gs))
-        , [playButton]
+        , [playButton, tournamentButton]
         ]
     where
         -- reconstruye botones tras cualquier cambio
@@ -169,6 +171,26 @@ makeButtons gs =
             , buttonSize     = (0.8, 0.2)
             , buttonText     = "Jugar"
             , buttonHandler  = startGame
+            }
+
+        -- Botón para iniciar un torneo leyendo la configuración de `config.txt`.
+        -- Usa `unsafePerformIO` para leer el archivo dentro del handler puro de botones.
+        tournamentButton = UIButton
+            { buttonPosition = (0, -0.80)
+            , buttonSize     = (0.8, 0.16)
+            , buttonText     = "Iniciar Torneo"
+            , buttonHandler  = \s ->
+                let cfgContent = unsafePerformIO (readFile "config.txt")
+                    (cfgs, stageSize', tournaments) = parseConfig cfgContent
+                    s' = s { gameBotConfigs = cfgs
+                           , gameStageSize = stageSize'
+                           , gameTotalRobotCount = length cfgs
+                           , gameTournamentActive = True
+                           , gameTournamentRemaining = tournaments
+                           , gameTournamentSeed = gameSeed s
+                           , gameTournamentConfigs = cfgs
+                           }
+                in startGame s'
             }
 
         -- Inicia juego a partir de gameBotConfigs

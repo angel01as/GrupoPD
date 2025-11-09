@@ -20,6 +20,11 @@ data GameState = GameState
     gameObstacles :: Map.Map ID Obstacle,
     -- Estadísticas temporales por robot durante un torneo
     gameStats :: Map.Map ID RobotStats,
+  -- Tournament control
+  gameTournamentActive :: Bool,
+  gameTournamentRemaining :: Int,
+  gameTournamentSeed :: Double,
+  gameTournamentConfigs :: [(ID, String)],
     gameBotConfigs :: [(ID, String)], -- Configuración de bots para el menú [(id, tipo)]
     gameTime :: Scalar, -- Tiempo actual del juego
     gameFrame :: Int, -- Frame actual del juego
@@ -38,6 +43,7 @@ data GameState = GameState
     gameIsInMenu :: Bool,
     gameCollisionCooldown :: Scalar
   } deriving (Show, Eq)
+
 
 -- Estado por defecto.
 instance Default GameState where
@@ -58,6 +64,11 @@ instance Default GameState where
       gameTotalProjectileCount = 0,
       gameTotalExplosionCount = 0,
         gameStats = Map.empty,
+      -- Tournament control
+      gameTournamentActive = False,
+      gameTournamentRemaining = 0,
+      gameTournamentSeed = 0,
+      gameTournamentConfigs = [],
       gameSimulationSpeed = 1.5,  -- Aumentado de 1 a 1.5 para más velocidad
       gameDebugInfo = False,
       gamePaused = False,

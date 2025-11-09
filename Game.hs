@@ -5,6 +5,7 @@ import Graphics.Gloss hiding (Vector, Point)
 import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
 import Graphics.Gloss.Interface.IO.Game (playIO)
 import Data.IORef (newIORef, readIORef, writeIORef, IORef)
+import Control.Concurrent (threadDelay)
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -18,6 +19,7 @@ import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), updateExplos
 import qualified Entities as E
 import qualified AI
 import GameState
+import Data.Default (def)
 import Rendering (drawGame)
 import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
 import Collisions (checkCollisions, checkCollision, detectRobotObstacleCollisions, detectProjectileObstacleCollisions, willCollideNextFrame, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
@@ -109,13 +111,47 @@ playGameWithCallback initialState callback = do
         if robotsLeft <= 1 && gamePaused nextState && not alreadyCalled
           then do
             writeIORef calledRef True
+            -- llamar callback para permitir logging/estadísticas
             mNext <- callback nextState
+            -- Si callback devuelve un estado explícito, usarlo (y continuar)
             case mNext of
               Just ns -> do
-                -- reiniciar bandera para siguiente torneo
                 writeIORef calledRef False
                 return (ns { gamePaused = False })
-              Nothing -> return nextState
+              Nothing -> do
+                -- Si estamos en modo torneo y quedan partidas, crear la siguiente partida tras 2s
+                if gameTournamentActive nextState && gameTournamentRemaining nextState > 1
+                  then do
+                    -- Esperar 2 segundos
+                    threadDelay (2 * 1000000)
+                    -- Construir siguiente GameState a partir de la configuración de torneo en el estado actual
+                    let cfgs = gameTournamentConfigs nextState
+                        stage = gameStageSize nextState
+                        seedBase' = gameTournamentSeed nextState + 1
+                        -- Usar la semilla incrementada en el estado actual
+                        currWithSeed = nextState { gameSeed = seedBase' }
+                        -- Plantilla inicial para regenerar usando la lógica de Game
+                        initialTemplate = def { gameStageSize = stage
+                                              , gameBotConfigs = cfgs
+                                              , gameWindowSize = gameWindowSize nextState
+                                              , gameImages = gameImages nextState
+                                              , gameIsInMenu = False
+                                              , gameRobots = Map.fromList [ (rid, createBasicRobot (0,0) beh rid) | (rid, beh) <- cfgs ]
+                                              , gameTotalRobotCount = length cfgs
+                                              }
+                        regenerated = regenerateRobotsWithRandomPositions currWithSeed initialTemplate
+                        ids = map fst cfgs
+                        newStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ]
+                        newRemaining = gameTournamentRemaining nextState - 1
+                        newState = regenerated { gameStats = newStats
+                                               , gamePaused = False
+                                               , gameTournamentRemaining = newRemaining
+                                               , gameTournamentSeed = seedBase'
+                                               }
+                    -- Permitir que el callback pueda dispararse de nuevo en la próxima partida
+                    writeIORef calledRef False
+                    return newState
+                  else return nextState
           else return nextState
 
   playIO window backgroundColor fps initialState drawIO handleIO preUpdateIO
