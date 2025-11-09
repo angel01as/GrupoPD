@@ -18,6 +18,8 @@ data GameState = GameState
     gameProjectiles :: Map.Map ID Projectile, -- Proyectiles
     gameExplosions :: Map.Map ID Explosion,
     gameObstacles :: Map.Map ID Obstacle,
+    -- Estadísticas temporales por robot durante un torneo
+    gameStats :: Map.Map ID RobotStats,
     gameBotConfigs :: [(ID, String)], -- Configuración de bots para el menú [(id, tipo)]
     gameTime :: Scalar, -- Tiempo actual del juego
     gameFrame :: Int, -- Frame actual del juego
@@ -48,13 +50,14 @@ instance Default GameState where
       gameFrame = 0,
       gameExplosions = Map.empty,
       gameObstacles = Map.empty,
-  gameBotConfigs = [],
+      gameBotConfigs = [],
       gameStageSize = (100, 50),
       gameImages = Map.empty,
       gameKeysPressed = Set.empty,
       gameTotalRobotCount = 0,
       gameTotalProjectileCount = 0,
       gameTotalExplosionCount = 0,
+        gameStats = Map.empty,
       gameSimulationSpeed = 1.5,  -- Aumentado de 1 a 1.5 para más velocidad
       gameDebugInfo = False,
       gamePaused = False,
@@ -63,3 +66,12 @@ instance Default GameState where
       gameSeed = 0,
       gameCollisionCooldown = 0
     }
+
+  -- Estadísticas por robot durante un torneo
+data RobotStats = RobotStats
+  { hitsReceived :: Int
+  , timeAlive :: Scalar
+  } deriving (Show, Eq)
+
+emptyRobotStats :: RobotStats
+emptyRobotStats = RobotStats { hitsReceived = 0, timeAlive = 0 }
