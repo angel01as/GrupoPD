@@ -1,128 +1,128 @@
 --- Torneo 1 ---
 Robot 1:
-  - Disparos realizados: 5
-  - Impactos logrados: 3 (precisi¢n: 60.000004%)
+  - Disparos realizados: 14
+  - Impactos logrados: 0 (precisi¢n: 0.0%)
   - Impactos recibidos: 4
   - Eliminaciones: 0
-  - Tiempo con vida: 16.208382s (44.97132% del torneo)
+  - Tiempo con vida: 84.78801s (100.0% del torneo)
 Robot 2:
-  - Disparos realizados: 8
-  - Impactos logrados: 5 (precisi¢n: 62.5%)
-  - Impactos recibidos: 4
-  - Eliminaciones: 1
-  - Tiempo con vida: 36.041595s (100.0% del torneo)
+  - Disparos realizados: 34
+  - Impactos logrados: 8 (precisi¢n: 23.529411%)
+  - Impactos recibidos: 0
+  - Eliminaciones: 2
+  - Tiempo con vida: 84.78801s (100.0% del torneo)
 Robot 3:
-  - Disparos realizados: 1
-  - Impactos logrados: 1 (precisi¢n: 100.0%)
-  - Impactos recibidos: 1
-  - Eliminaciones: 1
-  - Tiempo con vida: 36.041595s (100.0% del torneo)
-Ganador: 3
+  - Disparos realizados: 0
+  - Impactos logrados: 0 (precisi¢n: 0.0%)
+  - Impactos recibidos: 4
+  - Eliminaciones: 0
+  - Tiempo con vida: 12.316716s (14.526484% del torneo)
+Ganador: 2
 
 --- Torneo 2 ---
 Robot 1:
-  - Disparos realizados: 4
-  - Impactos logrados: 1 (precisi¢n: 25.0%)
-  - Impactos recibidos: 3
-  - Eliminaciones: 0
-  - Tiempo con vida: 10.250005s (23.33958% del torneo)
-Robot 2:
-  - Disparos realizados: 12
-  - Impactos logrados: 7 (precisi¢n: 58.333332%)
-  - Impactos recibidos: 2
-  - Eliminaciones: 1
-  - Tiempo con vida: 43.916832s (100.0% del torneo)
-Robot 3:
-  - Disparos realizados: 1
-  - Impactos logrados: 1 (precisi¢n: 100.0%)
+  - Disparos realizados: 6
+  - Impactos logrados: 0 (precisi¢n: 0.0%)
   - Impactos recibidos: 4
   - Eliminaciones: 0
-  - Tiempo con vida: 43.916832s (100.0% del torneo)
+  - Tiempo con vida: 20.475012s (40.087803% del torneo)
+Robot 2:
+  - Disparos realizados: 11
+  - Impactos logrados: 2 (precisi¢n: 18.181818%)
+  - Impactos recibidos: 0
+  - Eliminaciones: 2
+  - Tiempo con vida: 51.075413s (100.0% del torneo)
+Robot 3:
+  - Disparos realizados: 10
+  - Impactos logrados: 3 (precisi¢n: 30.000002%)
+  - Impactos recibidos: 1
+  - Eliminaciones: 0
+  - Tiempo con vida: 51.075413s (100.0% del torneo)
 Ganador: 2
 
 --- Torneo 3 ---
 Robot 1:
-  - Disparos realizados: 4
-  - Impactos logrados: 1 (precisi¢n: 25.0%)
-  - Impactos recibidos: 3
-  - Eliminaciones: 0
-  - Tiempo con vida: 10.250005s (23.33958% del torneo)
-Robot 2:
-  - Disparos realizados: 12
-  - Impactos logrados: 7 (precisi¢n: 58.333332%)
-  - Impactos recibidos: 2
-  - Eliminaciones: 1
-  - Tiempo con vida: 43.916832s (100.0% del torneo)
-Robot 3:
-  - Disparos realizados: 1
-  - Impactos logrados: 1 (precisi¢n: 100.0%)
+  - Disparos realizados: 5
+  - Impactos logrados: 1 (precisi¢n: 20.0%)
   - Impactos recibidos: 4
   - Eliminaciones: 0
-  - Tiempo con vida: 43.916832s (100.0% del torneo)
-Ganador: 2
+  - Tiempo con vida: 16.183409s (48.831196% del torneo)
+Robot 2:
+  - Disparos realizados: 8
+  - Impactos logrados: 4 (precisi¢n: 50.0%)
+  - Impactos recibidos: 1
+  - Eliminaciones: 1
+  - Tiempo con vida: 33.141537s (100.0% del torneo)
+Robot 3:
+  - Disparos realizados: 1
+  - Impactos logrados: 0 (precisi¢n: 0.0%)
+  - Impactos recibidos: 0
+  - Eliminaciones: 0
+  - Tiempo con vida: 33.141537s (100.0% del torneo)
+Ganador: 3
 
 === ESTADISTICAS AGREGADAS DE TODOS LOS TORNEOS ===
 
 Robot 1:
   Disparos:
-    - Promedio: 4.333333333333333
-    - M ximo: 5
-    - Total: 13
+    - Promedio: 8.333333333333334
+    - M ximo: 14
+    - Total: 25
   Impactos logrados:
-    - Promedio: 1.6666666666666667
-    - M ximo: 3
-    - Total: 5
-    - Precisi¢n promedio: 38.46154%
+    - Promedio: 0.3333333333333333
+    - M ximo: 1
+    - Total: 1
+    - Precisi¢n promedio: 4.0%
   Impactos recibidos:
-    - Promedio: 3.3333333333333335
+    - Promedio: 4.0
     - M ximo: 4
   Eliminaciones:
     - Promedio: 0.0
     - M ximo: 0
     - Total: 0
   Tiempo con vida:
-    - Promedio: 12.23613s
-    - M ximo: 16.208382s
+    - Promedio: 40.482143s
+    - M ximo: 84.78801s
 
 Robot 2:
   Disparos:
-    - Promedio: 10.666666666666666
-    - M ximo: 12
-    - Total: 32
+    - Promedio: 17.666666666666668
+    - M ximo: 34
+    - Total: 53
   Impactos logrados:
-    - Promedio: 6.333333333333333
-    - M ximo: 7
-    - Total: 19
-    - Precisi¢n promedio: 59.375%
+    - Promedio: 4.666666666666667
+    - M ximo: 8
+    - Total: 14
+    - Precisi¢n promedio: 26.415094%
   Impactos recibidos:
-    - Promedio: 2.6666666666666665
-    - M ximo: 4
-  Eliminaciones:
-    - Promedio: 1.0
+    - Promedio: 0.3333333333333333
     - M ximo: 1
-    - Total: 3
+  Eliminaciones:
+    - Promedio: 1.6666666666666667
+    - M ximo: 2
+    - Total: 5
   Tiempo con vida:
-    - Promedio: 41.29175s
-    - M ximo: 43.916832s
+    - Promedio: 56.334988s
+    - M ximo: 84.78801s
 
 Robot 3:
   Disparos:
-    - Promedio: 1.0
-    - M ximo: 1
-    - Total: 3
+    - Promedio: 3.6666666666666665
+    - M ximo: 10
+    - Total: 11
   Impactos logrados:
     - Promedio: 1.0
-    - M ximo: 1
+    - M ximo: 3
     - Total: 3
-    - Precisi¢n promedio: 100.0%
+    - Precisi¢n promedio: 27.272728%
   Impactos recibidos:
-    - Promedio: 3.0
+    - Promedio: 1.6666666666666667
     - M ximo: 4
   Eliminaciones:
-    - Promedio: 0.3333333333333333
-    - M ximo: 1
-    - Total: 1
+    - Promedio: 0.0
+    - M ximo: 0
+    - Total: 0
   Tiempo con vida:
-    - Promedio: 41.29175s
-    - M ximo: 43.916832s
+    - Promedio: 32.177887s
+    - M ximo: 51.075413s
 

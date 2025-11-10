@@ -186,19 +186,28 @@ playGameWithCallback initialState callback = do
               | gamePaused gs = preUpdatedState
               | otherwise = updateGame dt preUpdatedState
 
+        -- Si es un torneo y el archivo de estadísticas aún no se limpió, hacerlo ahora (en IO) y marcarlo
+        clearedState <- if gameTournamentActive nextState && not (gameTournamentFileCleared nextState)
+                        then case gameTournamentStatsFile nextState of
+                               Just fp -> do
+                                 writeFile fp ""
+                                 return (nextState { gameTournamentFileCleared = True })
+                               Nothing -> return nextState
+                        else return nextState
+
         -- Si la partida está pausada por haber quedado un robot, llamar al callback UNA VEZ
-        let robotsLeft = length (Map.elems (gameRobots nextState))
+        let robotsLeft = length (Map.elems (gameRobots clearedState))
         alreadyCalled <- readIORef calledRef
-        if robotsLeft <= 1 && gamePaused nextState && not alreadyCalled
+        if robotsLeft <= 1 && gamePaused clearedState && not alreadyCalled
           then do
             writeIORef calledRef True
 
             -- Si estamos en modo torneo, guardar estadísticas
-            when (gameTournamentActive nextState) $ do
-              case gameTournamentStatsFile nextState of
+            when (gameTournamentActive clearedState) $ do
+              case gameTournamentStatsFile clearedState of
                 Just filePath -> do
                   h <- openFile filePath AppendMode
-                  writeTournamentStats h (gameTournamentCurrentIndex nextState) nextState
+                  writeTournamentStats h (gameTournamentCurrentIndex clearedState) clearedState
                   hClose h
                 Nothing -> return ()
 
@@ -211,22 +220,22 @@ playGameWithCallback initialState callback = do
                 return (ns { gamePaused = False })
               Nothing -> do
                 -- Si estamos en modo torneo y quedan partidas, crear la siguiente partida tras 2s
-                if gameTournamentActive nextState && gameTournamentRemaining nextState > 1
+                if gameTournamentActive clearedState && gameTournamentRemaining clearedState > 1
                   then do
                     -- Esperar 2 segundos
                     threadDelay (2 * 1000000)
                     -- Construir siguiente GameState a partir de la configuración de torneo en el estado actual
-                    let cfgs = gameTournamentConfigs nextState
-                        stage = gameStageSize nextState
+                    let cfgs = gameTournamentConfigs clearedState
+                        stage = gameStageSize clearedState
                         -- Derivar semilla con más entropía para la siguiente partida
-                        seedBase' = deriveSeed (gameTournamentSeed nextState) (gameTournamentCurrentIndex nextState)
+                        seedBase' = deriveSeed (gameTournamentSeed clearedState) (gameTournamentCurrentIndex clearedState)
                         -- Usar la semilla incrementada en el estado actual
-                        currWithSeed = nextState { gameSeed = seedBase' }
+                        currWithSeed = clearedState { gameSeed = seedBase' }
                         -- Plantilla inicial para regenerar usando la lógica de Game
                         initialTemplate = def { gameStageSize = stage
                                               , gameBotConfigs = cfgs
-                                              , gameWindowSize = gameWindowSize nextState
-                                              , gameImages = gameImages nextState
+                                              , gameWindowSize = gameWindowSize clearedState
+                                              , gameImages = gameImages clearedState
                                               , gameIsInMenu = False
                                               , gameRobots = Map.fromList [ (rid, createBasicRobot (0,0) beh rid) | (rid, beh) <- cfgs ]
                                               , gameTotalRobotCount = length cfgs
@@ -234,17 +243,18 @@ playGameWithCallback initialState callback = do
                         regenerated = regenerateRobotsWithRandomPositions currWithSeed initialTemplate
                         ids = map fst cfgs
                         newStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ]
-                        newRemaining = gameTournamentRemaining nextState - 1
+                        newRemaining = gameTournamentRemaining clearedState - 1
                         -- Agregar estadísticas actuales al historial
-                        newHistory = gameStats nextState : gameTournamentStatsHistory nextState
+                        newHistory = gameStats clearedState : gameTournamentStatsHistory clearedState
                         newState = regenerated { gameStats = newStats
                                                , gamePaused = False
                                                , gameTournamentActive = True
                                                , gameTournamentRemaining = newRemaining
                                                , gameTournamentSeed = seedBase'
                                                , gameTournamentConfigs = cfgs
-                                               , gameTournamentStatsFile = gameTournamentStatsFile nextState
-                                               , gameTournamentCurrentIndex = gameTournamentCurrentIndex nextState + 1
+                                               , gameTournamentStatsFile = gameTournamentStatsFile clearedState
+                                               , gameTournamentFileCleared = gameTournamentFileCleared clearedState
+                                               , gameTournamentCurrentIndex = gameTournamentCurrentIndex clearedState + 1
                                                , gameTournamentStatsHistory = newHistory
                                                }
                     -- Permitir que el callback pueda dispararse de nuevo en la próxima partida
@@ -252,15 +262,15 @@ playGameWithCallback initialState callback = do
                     return newState
                   else do
                     -- Último torneo terminado - escribir estadísticas agregadas
-                    when (gameTournamentActive nextState) $ do
-                      let finalHistory = gameStats nextState : gameTournamentStatsHistory nextState
-                      case gameTournamentStatsFile nextState of
+                    when (gameTournamentActive clearedState) $ do
+                      let finalHistory = gameStats clearedState : gameTournamentStatsHistory clearedState
+                      case gameTournamentStatsFile clearedState of
                         Just filePath -> do
                           h <- openFile filePath AppendMode
                           writeAggregateStats h (reverse finalHistory)
                           hClose h
                         Nothing -> return ()
-                    return nextState
+                    return clearedState
           else return nextState
 
   playIO window backgroundColor fps initialState drawIO handleIO preUpdateIO

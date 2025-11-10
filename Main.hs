@@ -182,7 +182,8 @@ makeButtons gs =
             , buttonSize     = (0.8, 0.16)
             , buttonText     = "Iniciar Torneo"
             , buttonHandler  = \s ->
-                let cfgContent = unsafePerformIO (readFile "config.txt")
+                let _ = unsafePerformIO (writeFile "estadisticas.txt" "")
+                    cfgContent = unsafePerformIO (readFile "config.txt")
                     (cfgs, stageSize', tournaments) = parseConfig cfgContent
                     s' = s { gameBotConfigs = cfgs
                            , gameStageSize = stageSize'
@@ -191,6 +192,10 @@ makeButtons gs =
                            , gameTournamentRemaining = tournaments
                            , gameTournamentSeed = gameSeed s
                            , gameTournamentConfigs = cfgs
+                           , gameTournamentStatsFile = Just "estadisticas.txt"
+                   , gameTournamentFileCleared = False
+                           , gameTournamentCurrentIndex = 1
+                           , gameTournamentStatsHistory = []
                            }
                 in startGame s'
             }
