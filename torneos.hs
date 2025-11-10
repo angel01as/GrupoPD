@@ -2,8 +2,7 @@ module Torneos where
 
 import System.IO
 import Data.List (intercalate)
-import Data.Char (isSpace)
-import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Char (isSpace, ord)
 import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef')
 import Data.Default
 import qualified Data.Map as Map
@@ -48,6 +47,10 @@ splitByComma :: String -> [String]
 splitByComma s = case dropWhile (==',') s of
   "" -> []
   s' -> let (w, s'') = break (==',') s' in w : splitByComma s''
+
+-- Simple hash function to generate seed from string
+hashString :: String -> Double
+hashString s = fromIntegral $ foldl (\acc c -> (acc * 31 + ord c) `mod` 1000000) 0 s
 
 -- Cargar imágenes listadas en Rendering.usedImages
 loadImages :: [FilePath] -> IO (Map.Map String Picture)
@@ -103,15 +106,14 @@ runTournamentsFromConfig :: FilePath -> FilePath -> IO ()
 runTournamentsFromConfig configPath outPath = do
   cfg <- readFile configPath
   let (botConfigs, stageSize, totalT) = parseConfig cfg
-  baseTime <- getPOSIXTime
-  let seedStart = realToFrac baseTime
+  let seedStart = hashString cfg + 12345.0
   h <- openFile outPath AppendMode
   -- contador de torneos restantes y índice
   counterRef <- newIORef (1 :: Int)
   aggregateRef <- newIORef ([] :: [Map.Map Int RobotStats])
 
   let makeNextState :: Int -> IO GameState
-      makeNextState k = makeInitialState botConfigs stageSize (seedStart + fromIntegral k)
+      makeNextState k = makeInitialState botConfigs stageSize (seedStart + fromIntegral k * 7919.0)
 
   -- callback que se ejecuta al terminar cada partida
   let callback gs = do

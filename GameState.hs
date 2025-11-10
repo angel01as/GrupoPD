@@ -25,6 +25,9 @@ data GameState = GameState
   gameTournamentRemaining :: Int,
   gameTournamentSeed :: Double,
   gameTournamentConfigs :: [(ID, String)],
+  gameTournamentStatsFile :: Maybe FilePath,  -- Archivo para guardar estadísticas
+  gameTournamentCurrentIndex :: Int,  -- Índice del torneo actual
+  gameTournamentStatsHistory :: [Map.Map ID RobotStats],  -- Historial de estadísticas
     gameBotConfigs :: [(ID, String)], -- Configuración de bots para el menú [(id, tipo)]
     gameTime :: Scalar, -- Tiempo actual del juego
     gameFrame :: Int, -- Frame actual del juego
@@ -41,7 +44,8 @@ data GameState = GameState
     gameButtons :: [UIButton GameState],
     gameSeed :: Double,
     gameIsInMenu :: Bool,
-    gameCollisionCooldown :: Scalar
+    gameCollisionCooldown :: Scalar,
+    gameMenuTimer :: Scalar  -- Temporizador para inicio automático de torneo
   } deriving (Show, Eq)
 
 
@@ -69,20 +73,27 @@ instance Default GameState where
       gameTournamentRemaining = 0,
       gameTournamentSeed = 0,
       gameTournamentConfigs = [],
+      gameTournamentStatsFile = Nothing,
+      gameTournamentCurrentIndex = 1,
+      gameTournamentStatsHistory = [],
       gameSimulationSpeed = 1.5,  -- Aumentado de 1 a 1.5 para más velocidad
       gameDebugInfo = False,
       gamePaused = False,
       gameButtons = [],
       gameIsInMenu = True,
       gameSeed = 0,
-      gameCollisionCooldown = 0
+      gameCollisionCooldown = 0,
+      gameMenuTimer = 0
     }
 
   -- Estadísticas por robot durante un torneo
 data RobotStats = RobotStats
-  { hitsReceived :: Int
-  , timeAlive :: Scalar
+  { hitsReceived :: Int      -- Proyectiles que recibió el bot
+  , hitsLanded :: Int        -- Proyectiles que el bot disparó e impactaron
+  , shotsFired :: Int        -- Total de proyectiles disparados por el bot
+  , timeAlive :: Scalar      -- Tiempo total con vida
+  , kills :: Int             -- Número de robots eliminados por este bot
   } deriving (Show, Eq)
 
 emptyRobotStats :: RobotStats
-emptyRobotStats = RobotStats { hitsReceived = 0, timeAlive = 0 }
+emptyRobotStats = RobotStats { hitsReceived = 0, hitsLanded = 0, shotsFired = 0, timeAlive = 0, kills = 0 }

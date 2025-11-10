@@ -6,10 +6,14 @@ import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
 import Graphics.Gloss.Interface.IO.Game (playIO)
 import Data.IORef (newIORef, readIORef, writeIORef, IORef)
 import Control.Concurrent (threadDelay)
+import Control.Monad (when)
+import System.IO (openFile, hClose, IOMode(AppendMode))
+import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
+import Data.Char (isSpace)
 import Debug.Trace (trace)
 
 import Geometry
@@ -25,6 +29,7 @@ import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generat
 import Collisions (checkCollisions, checkCollision, detectRobotObstacleCollisions, detectProjectileObstacleCollisions, willCollideNextFrame, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
 import Geometry (add2D, prodByScalar, translateVertices)
 import UIButton (UIButton(..))
+import TournamentStats (writeTournamentStats, writeAggregateStats)
 
 -- Regenera los robots con nuevas posiciones aleatorias basadas en una semilla
 -- Esta función se llama cuando el jugador presiona 'R' para resetear el juego
@@ -61,6 +66,79 @@ regenerateRobotsWithRandomPositions currentState initialState =
     -- 2) Generar obstáculos evitando solapar robots ni entre ellos
     newObstacles = Map.fromList [ (obstacleID o, o) | o <- generateNonOverlappingObstacles stageSize' (realToFrac seedBase) (Map.elems newRobots) ]
 
+-- Función para iniciar el torneo automáticamente después de 5 segundos de inactividad
+autoStartTournament :: GameState -> GameState
+autoStartTournament s =
+  let -- Limpiar archivo de estadísticas anterior (sobrescribir)
+      _ = unsafePerformIO $ writeFile "estadisticas.txt" ""
+      
+      cfgContent = unsafePerformIO (readFile "config.txt")
+      -- Parser simple de config.txt
+      parseConfigLocal content = (zip ids botList, (w,h), tournaments')
+        where
+          trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+          ls = map (takeWhile (/='\r')) $ lines content
+          findKey k = case [ drop 1 (dropWhile (/=':') l) | l <- ls, take (length k) l == k ] of
+                        (v:_) -> trim v
+                        [] -> error $ "Missing config key: " ++ k
+          botsStr = findKey "bots"
+          splitByComma s' = case dropWhile (==',') s' of
+            "" -> []
+            s'' -> let (w', s''') = break (==',') s'' in w' : splitByComma s'''
+          botList = map trim $ splitByComma botsStr
+          ids = [1..length botList]
+          stageStr = findKey "stage"
+          (w,h) = case span (/='x') stageStr of
+                    (a, 'x':b) -> (read a :: Float, read b :: Float)
+                    _ -> error "stage must be WxH"
+          tournaments' = read (findKey "tournaments") :: Int
+      (cfgs, stageSize', tournaments) = parseConfigLocal cfgContent
+      seedBase = gameSeed s
+      bounds = (fst stageSize' / 2, snd stageSize' / 2)
+      
+      -- Generar robots con posiciones aleatorias
+      minRobotDist = 15.0 :: Float
+      distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
+      
+      generateRobotsSequentially :: [(Int, String)] -> [(Float, Float)] -> [(Int, Robot)]
+      generateRobotsSequentially [] _ = []
+      generateRobotsSequentially ((rid, behavior):rest) existingPositions =
+        let safePos = findSafePosition rid 0 existingPositions
+            robot = createBasicRobot safePos behavior rid
+        in (rid, robot) : generateRobotsSequentially rest (safePos : existingPositions)
+      
+      findSafePosition :: Int -> Int -> [(Float, Float)] -> (Float, Float)
+      findSafePosition rid attempt existingPos
+        | attempt >= 500 = generatePositionFromSeed bounds (seedBase * fromIntegral rid) rid
+        | otherwise =
+            let candidatePos = generatePositionFromSeed bounds (seedBase + fromIntegral attempt * 0.137) rid
+                tooCloseToRobot = any (\pos -> distanceBetween candidatePos pos < minRobotDist) existingPos
+            in if tooCloseToRobot then findSafePosition rid (attempt + 1) existingPos else candidatePos
+      
+      newRobots = Map.fromList (generateRobotsSequentially cfgs [])
+      robotPositions = [robotPosition r | (_, r) <- Map.toList newRobots]
+      newObstaclesList = generateRandomObstaclesWithRobots stageSize' (realToFrac seedBase) robotPositions
+      newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
+      ids = map fst cfgs
+      newStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ]
+      
+  in s { gameBotConfigs = cfgs
+       , gameStageSize = stageSize'
+       , gameTotalRobotCount = length cfgs
+       , gameTournamentActive = True
+       , gameTournamentRemaining = tournaments
+       , gameTournamentSeed = gameSeed s
+       , gameTournamentConfigs = cfgs
+       , gameTournamentStatsFile = Just "estadisticas.txt"
+       , gameTournamentCurrentIndex = 1
+       , gameTournamentStatsHistory = []
+       , gameIsInMenu = False
+       , gameRobots = newRobots
+       , gameObstacles = newObstacles
+       , gameMenuTimer = 0
+       , gameStats = newStats
+       }
+
 playGame :: GameState -> IO ()
 playGame initialState = playGameWithCallback initialState (\_ -> return Nothing)
 
@@ -83,21 +161,24 @@ playGameWithCallback initialState callback = do
       preUpdateIO dt preRealTimeGS = do
         let gs = preRealTimeGS { gameSeed = gameSeed preRealTimeGS + realToFrac dt * 12347 }
             keys = gameKeysPressed gs
+            -- Incrementar temporizador del menú si estamos en el menú
+            updatedMenuTimer = if gameIsInMenu gs then gameMenuTimer gs + dt else 0
             preUpdatedState
-              | Set.member (Char 'd') keys = gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys }
-              | Set.member (Char '1') keys = gs { gameSimulationSpeed = 0.1 }
-              | Set.member (Char '2') keys = gs { gameSimulationSpeed = 0.25 }
-              | Set.member (Char '3') keys = gs { gameSimulationSpeed = 0.5 }
-              | Set.member (Char '4') keys = gs { gameSimulationSpeed = 0.75 }
-              | Set.member (Char '5') keys = gs { gameSimulationSpeed = 1.0 }
-              | Set.member (Char '6') keys = gs { gameSimulationSpeed = 1.25 }
-              | Set.member (Char '7') keys = gs { gameSimulationSpeed = 1.5 }
-              | Set.member (Char '8') keys = gs { gameSimulationSpeed = 2.0 }
-              | Set.member (Char '9') keys = gs { gameSimulationSpeed = 2.5 }
-              | Set.member (Char '0') keys = gs { gameSimulationSpeed = 3.0 }
-              | otherwise = gs
+              | Set.member (Char 'd') keys = gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys, gameMenuTimer = 0 }
+              | Set.member (Char '1') keys = gs { gameSimulationSpeed = 0.1, gameMenuTimer = 0 }
+              | Set.member (Char '2') keys = gs { gameSimulationSpeed = 0.25, gameMenuTimer = 0 }
+              | Set.member (Char '3') keys = gs { gameSimulationSpeed = 0.5, gameMenuTimer = 0 }
+              | Set.member (Char '4') keys = gs { gameSimulationSpeed = 0.75, gameMenuTimer = 0 }
+              | Set.member (Char '5') keys = gs { gameSimulationSpeed = 1.0, gameMenuTimer = 0 }
+              | Set.member (Char '6') keys = gs { gameSimulationSpeed = 1.25, gameMenuTimer = 0 }
+              | Set.member (Char '7') keys = gs { gameSimulationSpeed = 1.5, gameMenuTimer = 0 }
+              | Set.member (Char '8') keys = gs { gameSimulationSpeed = 2.0, gameMenuTimer = 0 }
+              | Set.member (Char '9') keys = gs { gameSimulationSpeed = 2.5, gameMenuTimer = 0 }
+              | Set.member (Char '0') keys = gs { gameSimulationSpeed = 3.0, gameMenuTimer = 0 }
+              | otherwise = gs { gameMenuTimer = updatedMenuTimer }
 
         let nextState
+              | gameIsInMenu gs && gameMenuTimer preUpdatedState >= 5.0 = autoStartTournament preUpdatedState
               | gameIsInMenu gs = preUpdatedState
               | Set.member (Char 'r') keys = regenerateRobotsWithRandomPositions gs initialState
               | Set.member (SpecialKey KeySpace) keys && gamePaused gs = updateGame dt (preUpdatedState { gamePaused = not (gamePaused gs), gameKeysPressed = Set.delete (SpecialKey KeySpace) keys })
@@ -111,6 +192,16 @@ playGameWithCallback initialState callback = do
         if robotsLeft <= 1 && gamePaused nextState && not alreadyCalled
           then do
             writeIORef calledRef True
+            
+            -- Si estamos en modo torneo, guardar estadísticas
+            when (gameTournamentActive nextState) $ do
+              case gameTournamentStatsFile nextState of
+                Just filePath -> do
+                  h <- openFile filePath AppendMode
+                  writeTournamentStats h (gameTournamentCurrentIndex nextState) nextState
+                  hClose h
+                Nothing -> return ()
+            
             -- llamar callback para permitir logging/estadísticas
             mNext <- callback nextState
             -- Si callback devuelve un estado explícito, usarlo (y continuar)
@@ -143,15 +234,32 @@ playGameWithCallback initialState callback = do
                         ids = map fst cfgs
                         newStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ]
                         newRemaining = gameTournamentRemaining nextState - 1
+                        -- Agregar estadísticas actuales al historial
+                        newHistory = gameStats nextState : gameTournamentStatsHistory nextState
                         newState = regenerated { gameStats = newStats
                                                , gamePaused = False
+                                               , gameTournamentActive = True
                                                , gameTournamentRemaining = newRemaining
                                                , gameTournamentSeed = seedBase'
+                                               , gameTournamentConfigs = cfgs
+                                               , gameTournamentStatsFile = gameTournamentStatsFile nextState
+                                               , gameTournamentCurrentIndex = gameTournamentCurrentIndex nextState + 1
+                                               , gameTournamentStatsHistory = newHistory
                                                }
                     -- Permitir que el callback pueda dispararse de nuevo en la próxima partida
                     writeIORef calledRef False
                     return newState
-                  else return nextState
+                  else do
+                    -- Último torneo terminado - escribir estadísticas agregadas
+                    when (gameTournamentActive nextState) $ do
+                      let finalHistory = gameStats nextState : gameTournamentStatsHistory nextState
+                      case gameTournamentStatsFile nextState of
+                        Just filePath -> do
+                          h <- openFile filePath AppendMode
+                          writeAggregateStats h (reverse finalHistory)
+                          hClose h
+                        Nothing -> return ()
+                    return nextState
           else return nextState
 
   playIO window backgroundColor fps initialState drawIO handleIO preUpdateIO
@@ -260,7 +368,7 @@ tryHandleResizing event st = case event of
 
 tryHandleMouse :: Event -> GameState -> Maybe GameState
 tryHandleMouse event st = case event of
-  EventKey (MouseButton LeftButton) Down _ (mx,my) -> Just (applyButtons (mx,my) st)
+  EventKey (MouseButton LeftButton) Down _ (mx,my) -> Just (applyButtons (mx,my) (st { gameMenuTimer = 0 }))
   _                                               -> Nothing
   where
     applyButtons :: (Float,Float) -> GameState -> GameState
@@ -444,11 +552,27 @@ updateGame dt oldState = finalState
     applyRobotProjectileCollisions [] gs = gs
     applyRobotProjectileCollisions ((p, r):colls) gs = applyRobotProjectileCollisions colls updatedGS
       where
-        -- actualizar contador de impactos para el robot objetivo
+        -- actualizar estadísticas
         statsMap = gameStats gs
-        prevStats = Map.findWithDefault emptyRobotStats (robotID r) statsMap
-        incStats = prevStats { hitsReceived = hitsReceived prevStats + 1 }
-        statsWithHit = Map.insert (robotID r) incStats statsMap
+        
+        -- Actualizar hitsReceived para el robot que recibe el impacto
+        targetStats = Map.findWithDefault emptyRobotStats (robotID r) statsMap
+        updatedTargetStats = targetStats { hitsReceived = hitsReceived targetStats + 1 }
+        statsWithHitReceived = Map.insert (robotID r) updatedTargetStats statsMap
+        
+        -- Actualizar hitsLanded para el robot que disparó
+        shooterStats = Map.findWithDefault emptyRobotStats (projectileOwnerID p) statsWithHitReceived
+        updatedShooterStats = shooterStats { hitsLanded = hitsLanded shooterStats + 1 }
+        statsWithHitLanded = Map.insert (projectileOwnerID p) updatedShooterStats statsWithHitReceived
+        
+        -- Si el robot muere, incrementar kills del atacante
+        updatedR = r { robotEnergy = robotEnergy r - projectileDamage p }
+        robotDied = not (isRobotAlive updatedR)
+        finalStats = if robotDied
+                     then let shooterStatsWithKill = Map.findWithDefault emptyRobotStats (projectileOwnerID p) statsWithHitLanded
+                              updatedShooterWithKill = shooterStatsWithKill { kills = kills shooterStatsWithKill + 1 }
+                          in Map.insert (projectileOwnerID p) updatedShooterWithKill statsWithHitLanded
+                     else statsWithHitLanded
 
         updatedGS = if projectileOwnerID p == robotID r
           then gs
@@ -456,15 +580,13 @@ updateGame dt oldState = finalState
                   , gameProjectiles = Map.delete (projectileID p) (gameProjectiles gs)
                   , gameExplosions = Map.insert newID newExpl (gameExplosions gs)
                   , gameTotalExplosionCount = totalExplosionCount + 1
-                  , gameStats = statsWithHit
+                  , gameStats = finalStats
                   }
         totalExplosionCount = gameTotalExplosionCount gs
         robotsMap = gameRobots gs
         updatedRobots
           | isRobotAlive updatedR = Map.insert (robotID r) updatedR robotsMap
           | otherwise             = Map.delete (robotID r) robotsMap
-          where
-            updatedR = r { robotEnergy = robotEnergy r - projectileDamage p }
         newID = totalExplosionCount
         newExpl = createExplosion (position p) maxRadiusProj explDamage maxTime newID
 
@@ -623,6 +745,18 @@ updateGame dt oldState = finalState
     updatedRobots = fmap AI.updatedRobot aiResults
     spawnedProjectiles = concatMap AI.newProjectiles aiResults
 
+    -- Actualizar estadísticas de disparos
+    updateShotsFired :: Map.Map ID RobotStats -> [Projectile] -> Map.Map ID RobotStats
+    updateShotsFired stats [] = stats
+    updateShotsFired stats (p:ps) = 
+      let ownerID = projectileOwnerID p
+          ownerStats = Map.findWithDefault emptyRobotStats ownerID stats
+          updatedOwnerStats = ownerStats { shotsFired = shotsFired ownerStats + 1 }
+          updatedStats = Map.insert ownerID updatedOwnerStats stats
+      in updateShotsFired updatedStats ps
+    
+    statsWithShots = updateShotsFired (gameStats afterObstacles) spawnedProjectiles
+
     insertSpawnedProjectiles :: ID -> Map.Map ID Projectile -> [Projectile] -> Map.Map ID Projectile
     insertSpawnedProjectiles _ m [] = m
     insertSpawnedProjectiles nextID m (p:ps) = insertSpawnedProjectiles (nextID + 1) newM ps
@@ -636,6 +770,7 @@ updateGame dt oldState = finalState
       { gameRobots = updatedRobots
       , gameProjectiles = allProjectiles
       , gameTotalProjectileCount = totalProjectileCount + length spawnedProjectiles
+      , gameStats = statsWithShots
       }
 
     finalState = case Map.elems (gameRobots finalState') of

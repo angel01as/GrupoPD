@@ -12,10 +12,12 @@ import Graphics.Gloss(Picture)
 import Graphics.Gloss.Juicy(loadJuicy)
 
 import Rendering(usedImages)
-import Torneos (parseConfig)
+import Torneos (parseConfig, runTournamentsFromConfig)
 import System.IO.Unsafe (unsafePerformIO)
 import Data.Default
 import UIButton
+import Control.Monad (void)
+import Control.Concurrent (forkIO)
 
 -- Lista de comportamientos disponibles en orden cíclico
 -- Si hay 1 bot: aggressive
