@@ -2,7 +2,8 @@ module Torneos where
 
 import System.IO
 import Data.List (intercalate)
-import Data.Char (isSpace, ord)
+import Data.Char (isSpace)
+import Data.Time.Clock.POSIX (getPOSIXTime)
 import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef')
 import Data.Default
 import qualified Data.Map as Map
@@ -17,6 +18,7 @@ import RandomUtils (generatePositionFromSeed, generateNonOverlappingObstacles)
 import Robot (createBasicRobot)
 import Entities (Obstacle(..))
 import Geometry (Size)
+import TournamentStats (writeTournamentStats, writeAggregateStats)
 
 -- Parser muy simple de config.txt con formato:
 -- bots: aggressive,defensive,sniper
@@ -48,10 +50,6 @@ splitByComma s = case dropWhile (==',') s of
   "" -> []
   s' -> let (w, s'') = break (==',') s' in w : splitByComma s''
 
--- Simple hash function to generate seed from string
-hashString :: String -> Double
-hashString s = fromIntegral $ foldl (\acc c -> (acc * 31 + ord c) `mod` 1000000) 0 s
-
 -- Cargar imágenes listadas en Rendering.usedImages
 loadImages :: [FilePath] -> IO (Map.Map String Picture)
 loadImages [] = return Map.empty
@@ -80,40 +78,24 @@ makeInitialState botConfigs stageSize seedBase = do
 
 -- Escritura de estadísticas (append)
 appendTournamentStats :: Handle -> Int -> GameState -> IO ()
-appendTournamentStats h idx gs = do
-  hPutStrLn h $ "--- Torneo " ++ show idx ++ " ---"
-  let t = gameTime gs
-      statsMap = gameStats gs
-      robots = Map.elems (gameRobots gs)
-      robotIds = Map.keys statsMap
-  mapM_ (writeRobotStat h t statsMap) robotIds
-  let winner = case Map.keys (gameRobots gs) of
-                 [rid] -> show rid
-                 [] -> "None"
-                 _ -> "Multiple"
-  hPutStrLn h $ "Ganador: " ++ winner
-  hPutStrLn h ""
-  where
-    writeRobotStat h t stmap rid = do
-      let s = Map.findWithDefault emptyRobotStats rid stmap
-          hits = hitsReceived s
-          ta = timeAlive s
-          pct = if t > 0 then (ta / t) * 100 else 0
-      hPutStrLn h $ "Robot " ++ show rid ++ ": hits=" ++ show hits ++ ", tiempoVivo=" ++ show ta ++ ", pct=" ++ show pct ++ "%"
+appendTournamentStats = writeTournamentStats
 
 -- Función principal para lanzar torneos desde config.txt
 runTournamentsFromConfig :: FilePath -> FilePath -> IO ()
 runTournamentsFromConfig configPath outPath = do
   cfg <- readFile configPath
   let (botConfigs, stageSize, totalT) = parseConfig cfg
-  let seedStart = hashString cfg + 12345.0
+  baseTime <- getPOSIXTime
+  let seedStart = realToFrac baseTime
+  -- Limpiar archivo anterior (sobrescribir en lugar de agregar)
+  writeFile outPath ""
   h <- openFile outPath AppendMode
   -- contador de torneos restantes y índice
   counterRef <- newIORef (1 :: Int)
   aggregateRef <- newIORef ([] :: [Map.Map Int RobotStats])
 
   let makeNextState :: Int -> IO GameState
-      makeNextState k = makeInitialState botConfigs stageSize (seedStart + fromIntegral k * 7919.0)
+      makeNextState k = makeInitialState botConfigs stageSize (seedStart + fromIntegral k)
 
   -- callback que se ejecuta al terminar cada partida
   let callback gs = do
@@ -137,25 +119,7 @@ runTournamentsFromConfig configPath outPath = do
   playGameWithCallback initial callback
 
 writeAggregates :: Handle -> [Map.Map Int RobotStats] -> IO ()
-writeAggregates h aggs = do
-  hPutStrLn h "--- Estadisticas agregadas ---"
-  -- para cada robot calcular media de hits y maximo de hits y media tiempo vivo
-  let allKeys = Map.keys $ head aggs
-      byKey k = [ Map.findWithDefault emptyRobotStats k m | m <- aggs ]
-      avg xs = fromIntegral (sum xs) / fromIntegral (length xs)
-      maxVal xs = maximum xs
-  mapM_ (writeFor allKeys aggs) allKeys
-  where
-    writeFor allKeys aggs k = do
-      let lst = [ Map.findWithDefault emptyRobotStats k m | m <- aggs ]
-          hitsList = map hitsReceived lst
-          timeList = map timeAlive lst
-          avgHits = if null hitsList then 0 else avgInt hitsList
-          maxHits = if null hitsList then 0 else maximum hitsList
-          avgTime = if null timeList then 0 else avgF timeList
-      hPutStrLn h $ "Robot " ++ show k ++ ": avgHits=" ++ show avgHits ++ ", maxHits=" ++ show maxHits ++ ", avgTimeAlive=" ++ show avgTime
-    avgInt xs = fromIntegral (sum xs) / fromIntegral (length xs :: Int)
-    avgF xs = sum xs / fromIntegral (length xs)
+writeAggregates = writeAggregateStats
 
 -- Exported main helper
 mainRunTournaments :: IO ()
