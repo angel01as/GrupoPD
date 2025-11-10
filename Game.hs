@@ -668,7 +668,10 @@ updateGame dt oldState = finalState
     handleProjectileObstacle :: GameState -> GameState
     handleProjectileObstacle gs = foldl step gs projectileObstacleCollisions
       where
-        step acc (p, _) = acc { gameProjectiles = Map.delete (projectileID p) (gameProjectiles acc) }
+        -- Las bombas NO bloquean proyectiles ni se activan con ellos
+        step acc (p, o)
+          | obstacleType o == Bomb = acc    -- pasar de largo
+          | otherwise = acc { gameProjectiles = Map.delete (projectileID p) (gameProjectiles acc) }
 
     afterObstacles = handleProjectileObstacle (handleObstacleEffects collisionState)
 
