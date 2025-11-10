@@ -1,7 +1,7 @@
-import Game (playGame, generateRandomObstacles, generateRandomObstaclesWithRobots)
+import Game (playGame)
 import Robot (createBasicRobot, Robot(..))
 import GameState
-import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateRandomObstaclesWithRobots)
 import Entities (Obstacle(..))
 
 import qualified Data.Map as Map (Map, fromList, insert, empty, toList)

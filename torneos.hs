@@ -14,8 +14,8 @@ import Graphics.Gloss.Juicy (loadJuicy)
 import Game (playGameWithCallback)
 import GameState
 import Rendering (usedImages)
-import RandomUtils (generatePositionFromSeed, generateNonOverlappingObstacles)
-import Robot (createBasicRobot)
+import RandomUtils (generatePositionFromSeed, generateRandomObstaclesWithRobots, deriveSeed)
+import Robot (createBasicRobot, robotPosition)
 import Entities (Obstacle(..))
 import Geometry (Size)
 import TournamentStats (writeTournamentStats, writeAggregateStats)
@@ -70,7 +70,8 @@ makeInitialState botConfigs stageSize seedBase = do
       bounds = (fst stageSize / 2, snd stageSize / 2)
       positions = [ generatePositionFromSeed bounds seedBase rid | rid <- ids ]
       robots = Map.fromList [ (rid, createBasicRobot pos beh rid) | ((rid, beh), pos) <- zip botConfigs positions ]
-      obstaclesList = generateNonOverlappingObstacles stageSize (realToFrac seedBase) (Map.elems robots)
+      robotPositions = map robotPosition (Map.elems robots)
+      obstaclesList = generateRandomObstaclesWithRobots stageSize (realToFrac seedBase) robotPositions
       obstacles = Map.fromList [ (obstacleID o, o) | o <- obstaclesList ]
   imagesMap <- loadImages usedImages
   let gs = def { gameRobots = robots, gameObstacles = obstacles, gameStageSize = stageSize, gameImages = imagesMap, gameSeed = seedBase, gameBotConfigs = botConfigs, gameIsInMenu = False, gameStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ] }
@@ -95,7 +96,7 @@ runTournamentsFromConfig configPath outPath = do
   aggregateRef <- newIORef ([] :: [Map.Map Int RobotStats])
 
   let makeNextState :: Int -> IO GameState
-      makeNextState k = makeInitialState botConfigs stageSize (seedStart + fromIntegral k)
+      makeNextState k = makeInitialState botConfigs stageSize (deriveSeed seedStart k)
 
   -- callback que se ejecuta al terminar cada partida
   let callback gs = do

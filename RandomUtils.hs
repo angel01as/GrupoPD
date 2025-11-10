@@ -11,15 +11,25 @@ module RandomUtils (
   generatePositionFromSeed,
   generateAllRobotPositions,
   generateSafeRobotPosition,
-  generateNonOverlappingObstacles
+  generateRandomObstacles,
+  generateRandomObstaclesWithRobots,
+  deriveSeed
 ) where
 
 import Entities (Obstacle(..), ObstacleType(..), ObstacleShape(..))
 import Geometry (Size, Position, add2D)
+import Graphics.Gloss (greyN, makeColor)
 import Robot (Robot(..))
 import Data.List (find)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
+
+-- Derivar semillas con algo más de entropía para evitar partidas idénticas
+deriveSeed :: Double -> Int -> Double
+deriveSeed base k = base + fromIntegral k * 10007.13 + perturb
+  where
+    perturb = realToFrac $ frac (sin (base * fromIntegral k * 0.123) * 43758.5453)
+    frac x = x - fromIntegral (floor x :: Int)
 
 -- Genera una posición aleatoria basándose en una semilla 
 -- Esta función NO usa IO, por lo que puede usarse tanto al inicio como al resetear
@@ -87,59 +97,82 @@ overlaps (x1,y1) (sx1,sy1) (x2,y2) (sx2,sy2) =
 
 -- Genera obstáculos aleatorios evitando solapar robots y otros obstáculos ya colocados.
 -- Intenta recolocar hasta 500 veces por obstáculo; si no cabe, lo omite.
-generateNonOverlappingObstacles :: Size -> Float -> [Robot] -> [Obstacle]
-generateNonOverlappingObstacles (w,h) seed robots = take 4 $ go [] ids
+-- Generación determinista de obstáculos (verificando que no se generen sobre robots)
+generateRandomObstacles :: Size -> Float -> [Obstacle]
+generateRandomObstacles stageSize seed = generateRandomObstaclesWithRobots stageSize seed []
+
+generateRandomObstaclesWithRobots :: Size -> Float -> [(Float, Float)] -> [Obstacle]
+generateRandomObstaclesWithRobots (w,h) seed robotPositions = generateObstaclesSequentially [] ids
   where
     bounds = (w/2, h/2)
     ids = [1001..]
-    -- Probabilidad por tipo tal como en Game.generateRandomObstacles
+    minDistanceToRobot = 12.0 :: Float  -- Distancia mínima entre obstáculo y robot
+    minDistanceBetweenObstacles = 15.0 :: Float  -- Distancia mínima entre obstáculos
+    maxObstacles = 6  -- Máximo número de obstáculos
+
+    -- Distribución de tipos de obstáculos (33.33% cada uno - probabilidad igual)
     pickType rid = let p = frac (sin (seed*0.73 + fromIntegral rid*12.3) * 43758.5453)
-                   in if p < 0.05 then Solid else if p < 0.20 then Hazard else if p < 0.40 then Bomb else Special
+                   in if p < 0.3333
+                      then Solid    -- 33.33%: No pasa nada (solo impide el paso)
+                      else if p < 0.6666
+                           then Hazard  -- 33.33%: Hace daño al tocarlos
+                           else Bomb    -- 33.33%: Cuenta atrás y explosión
     frac x = x - fromIntegral (floor x :: Int)
 
-    go acc (rid:rest)
-      | length acc >= 4 = acc
+    distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
+
+    -- Genera obstáculos secuencialmente verificando que no se solapen
+    generateObstaclesSequentially :: [Obstacle] -> [Int] -> [Obstacle]
+    generateObstaclesSequentially acc _ | length acc >= maxObstacles = acc
+    generateObstaclesSequentially acc [] = acc
+    generateObstaclesSequentially acc (rid:rids) =
+      case tryMkObs 0 rid (map obstaclePosition acc) of
+        Just obs -> generateObstaclesSequentially (obs : acc) rids
+        Nothing -> generateObstaclesSequentially acc rids  -- Si falla, intenta con el siguiente ID
+
+    -- Intenta generar un obstáculo, reintentando si está muy cerca de un robot u otro obstáculo
+    tryMkObs :: Int -> Int -> [(Float, Float)] -> Maybe Obstacle
+    tryMkObs attempt rid existingObstaclePositions
+      | attempt >= 100 = Nothing  -- Fallback: si después de 100 intentos no encuentra posición, no genera el obstáculo
       | otherwise =
-          case tryPlace acc rid 0 of
-            Just o  -> go (acc ++ [o]) rest
-            Nothing -> go acc rest
+          -- Generador 2D hash-based independiente para romper patrones en diagonal
+          -- Dos hashes distintos para X e Y en [0,1)
+          let frac' x = x - fromIntegral (floor x :: Int)
+              u = realToFrac $ frac' (sin (seed*0.873 + fromIntegral rid*12.9898 + fromIntegral attempt*78.233) * 43758.5453)
+              v = realToFrac $ frac' (sin (seed*1.327 + fromIntegral rid*4.1234  + fromIntegral attempt*93.733) * 15731.7431)
+              (bx,by) = bounds
+              pos = ((u*2-1)*bx, (v*2-1)*by)
+              tooCloseToRobot = any (\robotPos -> distanceBetween pos robotPos < minDistanceToRobot) robotPositions
+              tooCloseToObstacle = any (\obstaclePos -> distanceBetween pos obstaclePos < minDistanceBetweenObstacles) existingObstaclePositions
+          in if tooCloseToRobot || tooCloseToObstacle
+             then tryMkObs (attempt + 1) rid existingObstaclePositions
+             else Just (mkObs rid pos)
 
-    tryPlace acc rid k
-      | k > 500 = Nothing
-      | otherwise =
-          let pos = generatePositionFromSeed bounds (realToFrac seed + fromIntegral k * 0.03) rid
-              t = pickType rid
-              (shape, sz, col) = case t of
-                Solid  -> (Square, (8,8), 0)
-                Hazard -> (Circle, (6,6), 0)
-                Bomb   -> (Square, (4,4), 0)
-                Special-> (Polygon (regularPolygonVerts 8 3.0), (6,6), 0)
-              localVerts = case shape of
-                Square -> let (sx, sy) = sz in [(-sx/2,-sy/2),(sx/2,-sy/2),(sx/2,sy/2),(-sx/2,sy/2)]
-                Circle -> circleApproxVerts (fst sz / 2) 16
-                Polygon pts -> pts
-              worldVerts = map (add2D pos) localVerts
-              candidate = Obs { obstacleID = rid
-                               , obstacleType = t
-                               , obstacleShape = shape
-                               , obstaclePosition = pos
-                               , obstacleVertices = worldVerts
-                               , obstacleSize = sz
-                               , obstacleOrientation = 0
-                               , obstacleHealth = 100
-                               , obstacleTimer = Nothing
-                               , obstacleColor = undefined -- color no usado aquí; lo decide Rendering
-                               }
-          in if collidesAny pos sz robots acc
-               then tryPlace acc rid (k+1)
-               else Just candidate
+    mkObs rid pos =
+      let t = pickType rid
+          (shape, sz, col) = case t of
+            Solid  -> (Square, (10,10), greyN 0.5)              -- GRIS - Solo impide el paso
+            Hazard -> (Circle, (8,8), makeColor 1 0 0 0.9)      -- ROJO - Hace daño constante
+            Bomb   -> (Square, (7,7), makeColor 1 1 0 0.9)      -- AMARILLO - Cuenta atrás y explosión
+            Special-> (Square, (8,8), makeColor 0.5 0.5 0.5 0.5) -- (No debería generarse)
+          localVerts = case shape of
+            Square -> let (sx, sy) = sz in [(-sx/2,-sy/2),(sx/2,-sy/2),(sx/2,sy/2),(-sx/2,sy/2)]
+            Circle -> circleApproxVerts (fst sz / 2) 16
+            Polygon pts -> pts
+          worldVerts = map (add2D pos) localVerts
+      in Obs { obstacleID = rid
+             , obstacleType = t
+             , obstacleShape = shape
+             , obstaclePosition = pos
+             , obstacleVertices = worldVerts
+             , obstacleSize = sz
+             , obstacleOrientation = 0
+             , obstacleHealth = 100
+             , obstacleTimer = Nothing
+             , obstacleColor = col
+             }
 
-    -- Chequear contra robots y obstáculos ya aceptados
-    collidesAny (x,y) sz robots' obstacles' =
-      let robotOverlap = any (\r -> overlaps (x,y) sz (robotPosition r) (robotSize r)) robots'
-          obsOverlap   = any (\o -> overlaps (x,y) sz (obstaclePosition o) (obstacleSize o)) obstacles'
-      in robotOverlap || obsOverlap
-
+    -- Utilidades de geometría para formas
     circleApproxVerts r n = [ (r * cos (theta i), r * sin (theta i)) | i <- [0..n-1] ]
       where theta i = 2*pi*fromIntegral i / fromIntegral n
     regularPolygonVerts n r = [ (r * cos (theta i), r * sin (theta i)) | i <- [0..n-1] ]

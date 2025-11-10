@@ -1,5 +1,5 @@
 -- Módulo que implementa el bucle principal del juego.
-module Game (playGame, playGameWithCallback, generateRandomObstacles, generateRandomObstaclesWithRobots) where
+module Game (playGame, playGameWithCallback) where
 
 import Graphics.Gloss hiding (Vector, Point)
 import Graphics.Gloss.Interface.Pure.Game hiding (Vector, Point)
@@ -25,11 +25,11 @@ import qualified AI
 import GameState
 import Data.Default (def)
 import Rendering (drawGame)
-import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateNonOverlappingObstacles)
+import RandomUtils (generatePositionFromSeed, generateSafeRobotPosition, generateRandomObstacles, generateRandomObstaclesWithRobots, deriveSeed)
 import Collisions (checkCollisions, checkCollision, detectRobotObstacleCollisions, detectProjectileObstacleCollisions, willCollideNextFrame, RobotProjectileCollisionEvent, RobotRobotCollisionEvent)
-import Geometry (add2D, prodByScalar, translateVertices)
 import UIButton (UIButton(..))
 import TournamentStats (writeTournamentStats, writeAggregateStats)
+
 
 -- Regenera los robots con nuevas posiciones aleatorias basadas en una semilla
 -- Esta función se llama cuando el jugador presiona 'R' para resetear el juego
@@ -64,14 +64,14 @@ regenerateRobotsWithRandomPositions currentState initialState =
       ]
 
     -- 2) Generar obstáculos evitando solapar robots ni entre ellos
-    newObstacles = Map.fromList [ (obstacleID o, o) | o <- generateNonOverlappingObstacles stageSize' (realToFrac seedBase) (Map.elems newRobots) ]
+    newObstacles = Map.fromList [ (obstacleID o, o) | o <- generateRandomObstaclesWithRobots stageSize' (realToFrac seedBase) (map robotPosition (Map.elems newRobots)) ]
 
 -- Función para iniciar el torneo automáticamente después de 5 segundos de inactividad
 autoStartTournament :: GameState -> GameState
 autoStartTournament s =
   let -- Limpiar archivo de estadísticas anterior (sobrescribir)
       _ = unsafePerformIO $ writeFile "estadisticas.txt" ""
-      
+
       cfgContent = unsafePerformIO (readFile "config.txt")
       -- Parser simple de config.txt
       parseConfigLocal content = (zip ids botList, (w,h), tournaments')
@@ -95,18 +95,18 @@ autoStartTournament s =
       (cfgs, stageSize', tournaments) = parseConfigLocal cfgContent
       seedBase = gameSeed s
       bounds = (fst stageSize' / 2, snd stageSize' / 2)
-      
+
       -- Generar robots con posiciones aleatorias
       minRobotDist = 15.0 :: Float
       distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
-      
+
       generateRobotsSequentially :: [(Int, String)] -> [(Float, Float)] -> [(Int, Robot)]
       generateRobotsSequentially [] _ = []
       generateRobotsSequentially ((rid, behavior):rest) existingPositions =
         let safePos = findSafePosition rid 0 existingPositions
             robot = createBasicRobot safePos behavior rid
         in (rid, robot) : generateRobotsSequentially rest (safePos : existingPositions)
-      
+
       findSafePosition :: Int -> Int -> [(Float, Float)] -> (Float, Float)
       findSafePosition rid attempt existingPos
         | attempt >= 500 = generatePositionFromSeed bounds (seedBase * fromIntegral rid) rid
@@ -114,14 +114,14 @@ autoStartTournament s =
             let candidatePos = generatePositionFromSeed bounds (seedBase + fromIntegral attempt * 0.137) rid
                 tooCloseToRobot = any (\pos -> distanceBetween candidatePos pos < minRobotDist) existingPos
             in if tooCloseToRobot then findSafePosition rid (attempt + 1) existingPos else candidatePos
-      
+
       newRobots = Map.fromList (generateRobotsSequentially cfgs [])
       robotPositions = [robotPosition r | (_, r) <- Map.toList newRobots]
       newObstaclesList = generateRandomObstaclesWithRobots stageSize' (realToFrac seedBase) robotPositions
       newObstacles = Map.fromList [ (obstacleID o, o) | o <- newObstaclesList ]
       ids = map fst cfgs
       newStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ]
-      
+
   in s { gameBotConfigs = cfgs
        , gameStageSize = stageSize'
        , gameTotalRobotCount = length cfgs
@@ -192,7 +192,7 @@ playGameWithCallback initialState callback = do
         if robotsLeft <= 1 && gamePaused nextState && not alreadyCalled
           then do
             writeIORef calledRef True
-            
+
             -- Si estamos en modo torneo, guardar estadísticas
             when (gameTournamentActive nextState) $ do
               case gameTournamentStatsFile nextState of
@@ -201,7 +201,7 @@ playGameWithCallback initialState callback = do
                   writeTournamentStats h (gameTournamentCurrentIndex nextState) nextState
                   hClose h
                 Nothing -> return ()
-            
+
             -- llamar callback para permitir logging/estadísticas
             mNext <- callback nextState
             -- Si callback devuelve un estado explícito, usarlo (y continuar)
@@ -218,7 +218,8 @@ playGameWithCallback initialState callback = do
                     -- Construir siguiente GameState a partir de la configuración de torneo en el estado actual
                     let cfgs = gameTournamentConfigs nextState
                         stage = gameStageSize nextState
-                        seedBase' = gameTournamentSeed nextState + 1
+                        -- Derivar semilla con más entropía para la siguiente partida
+                        seedBase' = deriveSeed (gameTournamentSeed nextState) (gameTournamentCurrentIndex nextState)
                         -- Usar la semilla incrementada en el estado actual
                         currWithSeed = nextState { gameSeed = seedBase' }
                         -- Plantilla inicial para regenerar usando la lógica de Game
@@ -264,86 +265,7 @@ playGameWithCallback initialState callback = do
 
   playIO window backgroundColor fps initialState drawIO handleIO preUpdateIO
 
--- Generación determinista de obstáculos (verificando que no se generen sobre robots)
-generateRandomObstacles :: Size -> Float -> [Obstacle]
-generateRandomObstacles stageSize seed = generateRandomObstaclesWithRobots stageSize seed []
 
-generateRandomObstaclesWithRobots :: Size -> Float -> [(Float, Float)] -> [Obstacle]
-generateRandomObstaclesWithRobots (w,h) seed robotPositions = generateObstaclesSequentially [] ids
-  where
-    bounds = (w/2, h/2)
-    ids = [1001..]
-    minDistanceToRobot = 12.0 :: Float  -- Distancia mínima entre obstáculo y robot
-    minDistanceBetweenObstacles = 15.0 :: Float  -- Distancia mínima entre obstáculos
-    maxObstacles = 6  -- Máximo número de obstáculos
-
-    -- Distribución de tipos de obstáculos (33.33% cada uno - probabilidad igual)
-    pickType rid = let p = frac (sin (seed*0.73 + fromIntegral rid*12.3) * 43758.5453)
-                   in if p < 0.3333
-                      then Solid    -- 33.33%: No pasa nada (solo impide el paso)
-                      else if p < 0.6666
-                           then Hazard  -- 33.33%: Hace daño al tocarlos
-                           else Bomb    -- 33.33%: Cuenta atrás y explosión
-    frac x = x - fromIntegral (floor x :: Int)
-
-    distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
-
-    -- Genera obstáculos secuencialmente verificando que no se solapen
-    generateObstaclesSequentially :: [Obstacle] -> [Int] -> [Obstacle]
-    generateObstaclesSequentially acc _ | length acc >= maxObstacles = acc
-    generateObstaclesSequentially acc [] = acc
-    generateObstaclesSequentially acc (rid:rids) =
-      case tryMkObs 0 rid (map obstaclePosition acc) of
-        Just obs -> generateObstaclesSequentially (obs : acc) rids
-        Nothing -> generateObstaclesSequentially acc rids  -- Si falla, intenta con el siguiente ID
-
-    -- Intenta generar un obstáculo, reintentando si está muy cerca de un robot u otro obstáculo
-    tryMkObs :: Int -> Int -> [(Float, Float)] -> Maybe Obstacle
-    tryMkObs attempt rid existingObstaclePositions
-      | attempt >= 100 = Nothing  -- Fallback: si después de 100 intentos no encuentra posición, no genera el obstáculo
-      | otherwise =
-          -- Generador 2D hash-based independiente para romper patrones en diagonal
-          -- Dos hashes distintos para X e Y en [0,1)
-          let frac' x = x - fromIntegral (floor x :: Int)
-              u = realToFrac $ frac' (sin (seed*0.873 + fromIntegral rid*12.9898 + fromIntegral attempt*78.233) * 43758.5453)
-              v = realToFrac $ frac' (sin (seed*1.327 + fromIntegral rid*4.1234  + fromIntegral attempt*93.733) * 15731.7431)
-              (bx,by) = bounds
-              pos = ((u*2-1)*bx, (v*2-1)*by)
-              tooCloseToRobot = any (\robotPos -> distanceBetween pos robotPos < minDistanceToRobot) robotPositions
-              tooCloseToObstacle = any (\obstaclePos -> distanceBetween pos obstaclePos < minDistanceBetweenObstacles) existingObstaclePositions
-          in if tooCloseToRobot || tooCloseToObstacle
-             then tryMkObs (attempt + 1) rid existingObstaclePositions
-             else Just (mkObs rid pos)
-
-    mkObs rid pos =
-      let t = pickType rid
-          (shape, sz, col) = case t of
-            Solid  -> (E.Square, (10,10), greyN 0.5)              -- GRIS - Solo impide el paso
-            Hazard -> (E.Circle, (8,8), makeColor 1 0 0 0.9)      -- ROJO - Hace daño constante
-            Bomb   -> (E.Square, (7,7), makeColor 1 1 0 0.9)      -- AMARILLO - Cuenta atrás y explosión
-            Special-> (E.Square, (8,8), makeColor 0.5 0.5 0.5 0.5) -- (No debería generarse)
-          localVerts = case shape of
-            E.Square -> let (sx, sy) = sz in [(-sx/2,-sy/2),(sx/2,-sy/2),(sx/2,sy/2),(-sx/2,sy/2)]
-            E.Circle -> circleApproxVerts (fst sz / 2) 16
-            E.Polygon pts -> pts
-          worldVerts = map (add2D pos) localVerts
-      in Obs { obstacleID = rid
-             , obstacleType = t
-             , obstacleShape = shape
-             , obstaclePosition = pos
-             , obstacleVertices = worldVerts
-             , obstacleSize = sz
-             , obstacleOrientation = 0
-             , obstacleHealth = 100
-             , obstacleTimer = Nothing
-             , obstacleColor = col
-             }
-
-    -- Utilidades de geometría para formas
-    circleApproxVerts r n = [ (r * cos (theta i), r * sin (theta i)) | i <- [0..n-1] ]
-      where theta i = 2*pi*fromIntegral i / fromIntegral n
-    regularPolygonVerts n r = [ (r * cos (theta i), r * sin (theta i)) | i <- [0..n-1] ]
-      where theta i = 2*pi*fromIntegral i / fromIntegral n
 
 -- ==========================
 -- Manejo de eventos
@@ -442,9 +364,9 @@ updateGame dt oldState = finalState
         cy = max minY (min maxY y)
 
         -- Rebote suave: invertir solo la componente de velocidad que va hacia el límite
-        nvx = if (nearLeft && vx < 0) || (nearRight && vx > 0) then -vx * 0.6 else vx
-        nvy = if (nearBottom && vy < 0) || (nearTop && vy > 0) then -vy * 0.6 else vy
-        
+        nvx = if (nearLeft && vx < 0) || (nearRight && vx > 0) then-vx * 0.6 else vx
+        nvy = if (nearBottom && vy < 0) || (nearTop && vy > 0) then-vy * 0.6 else vy
+
         -- Solo aplicar cambios si realmente está fuera o muy cerca
         needsCorrection = x /= cx || y /= cy || nearLeft || nearRight || nearTop || nearBottom
 
@@ -554,17 +476,17 @@ updateGame dt oldState = finalState
       where
         -- actualizar estadísticas
         statsMap = gameStats gs
-        
+
         -- Actualizar hitsReceived para el robot que recibe el impacto
         targetStats = Map.findWithDefault emptyRobotStats (robotID r) statsMap
         updatedTargetStats = targetStats { hitsReceived = hitsReceived targetStats + 1 }
         statsWithHitReceived = Map.insert (robotID r) updatedTargetStats statsMap
-        
+
         -- Actualizar hitsLanded para el robot que disparó
         shooterStats = Map.findWithDefault emptyRobotStats (projectileOwnerID p) statsWithHitReceived
         updatedShooterStats = shooterStats { hitsLanded = hitsLanded shooterStats + 1 }
         statsWithHitLanded = Map.insert (projectileOwnerID p) updatedShooterStats statsWithHitReceived
-        
+
         -- Si el robot muere, incrementar kills del atacante
         updatedR = r { robotEnergy = robotEnergy r - projectileDamage p }
         robotDied = not (isRobotAlive updatedR)
@@ -748,13 +670,13 @@ updateGame dt oldState = finalState
     -- Actualizar estadísticas de disparos
     updateShotsFired :: Map.Map ID RobotStats -> [Projectile] -> Map.Map ID RobotStats
     updateShotsFired stats [] = stats
-    updateShotsFired stats (p:ps) = 
+    updateShotsFired stats (p:ps) =
       let ownerID = projectileOwnerID p
           ownerStats = Map.findWithDefault emptyRobotStats ownerID stats
           updatedOwnerStats = ownerStats { shotsFired = shotsFired ownerStats + 1 }
           updatedStats = Map.insert ownerID updatedOwnerStats stats
       in updateShotsFired updatedStats ps
-    
+
     statsWithShots = updateShotsFired (gameStats afterObstacles) spawnedProjectiles
 
     insertSpawnedProjectiles :: ID -> Map.Map ID Projectile -> [Projectile] -> Map.Map ID Projectile
