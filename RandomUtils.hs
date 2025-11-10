@@ -110,17 +110,17 @@ generateRandomObstaclesWithRobots (w,h) seed robotPositions = generateObstaclesS
     minDistanceBetweenObstacles = 15.0 :: Float  -- Distancia mínima entre obstáculos
     maxObstacles = 9  -- Subido a 9 obstáculos
 
-    -- Plan de tipos: garantizar 3 sólidos, el resto por probabilidad
+    -- Plan de tipos: garantizar mínimo 3 sólidos (primeros 3 forzados) y el resto probabilístico
     plan :: [(Int, Maybe ObstacleType)]
     plan = take maxObstacles (zip ids (replicate 3 (Just Solid) ++ repeat Nothing))
 
-    -- Distribución ajustada: Solid 30%, Bomb 40%, Hazard 30%
-    pickType rid = let p = frac (sin (seed*0.73 + fromIntegral rid*12.3) * 43758.5453)
-                   in if p < 0.30
-                        then Solid            -- 0.00 - 0.30
-                        else if p < 0.70
-                          then Bomb          -- 0.30 - 0.70
-                          else Hazard        -- 0.70 - 1.00
+    -- Distribución ajustada: Solid 30%, Bomb 40%, Hazard 30% para los NO forzados
+    -- Mezclamos dos hashes para reducir sesgo.
+    pickType rid =
+      let r1 = frac (sin (seed*0.731 + fromIntegral rid*12.37) * 43758.5453123)
+          r2 = frac (sin (seed*1.913 + fromIntegral rid*0.097) * 19642.349127)
+          p  = frac (r1 + 0.43*r2)
+      in if p < 0.30 then Solid else if p < 0.70 then Bomb else Hazard
     frac x = x - fromIntegral (floor x :: Int)
 
     distanceBetween (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)

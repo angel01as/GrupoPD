@@ -99,9 +99,13 @@ drawGame gs
   where
     regularGameInfo =
       let base = Pictures [background, obstaclesPic, robotsPic, projectilesPic, explosionsPic, ui]
-      in case Map.elems (gameRobots gs) of
-           [winner] -> Pictures [base, drawWinnerScreen winner]
-           _        -> base
+          withWinner = case Map.elems (gameRobots gs) of
+                          [winner] -> Pictures [base, drawWinnerScreen winner]
+                          _        -> base
+          withCountdown = if gameTournamentCountdown gs > 0 && gameTournamentActive gs
+                            then Pictures [withWinner, drawCountdownOverlay (gameTournamentCountdown gs)]
+                            else withWinner
+      in withCountdown
     debugGameInfo = Pictures [createBorder, drawAllVertices, drawObstacleDebug, drawPredictedCollisions gs]
     windowSize' = gameWindowSize gs
     (windowWidth, windowHeight) = (fromIntegral (fst windowSize'), fromIntegral (snd windowSize'))
@@ -243,6 +247,17 @@ drawGame gs
                        Pictures [ texture, timerTxt]
              in box
            Special -> basePic (makeColor 0.2 0.6 1.0 0.5)
+
+    -- Overlay de cuenta atrás entre torneos
+    drawCountdownOverlay :: Scalar -> Picture
+    drawCountdownOverlay t =
+      let (winW, winH) = (fromIntegral (fst (gameWindowSize gs)), fromIntegral (snd (gameWindowSize gs)))
+          overlay = Color (withAlpha 0.65 black) $ rectangleSolid winW winH
+          secondsInt = max 1 (ceiling t :: Int) -- aseguramos mostrar 1..3
+          txt = show secondsInt
+          title = Color white $ Translate (-150) 40 $ Scale 0.35 0.35 $ Text "Siguiente torneo en"
+          numberPic = Color yellow $ Translate (-60) (-40) $ Scale 0.8 0.8 $ Text txt
+      in Pictures [overlay, title, numberPic]
 
     -- Pantalla de ganador superpuesta
     drawWinnerScreen :: Robot -> Picture

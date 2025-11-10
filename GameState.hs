@@ -29,6 +29,7 @@ data GameState = GameState
   gameTournamentCurrentIndex :: Int,  -- Índice del torneo actual
   gameTournamentFileCleared :: Bool, -- Indica si se limpió el archivo de estadísticas al iniciar
   gameTournamentStatsHistory :: [Map.Map ID RobotStats],  -- Historial de estadísticas
+  gameTournamentCountdown :: Scalar, -- Cuenta atrás entre torneos (en segundos), 0 si no activa
     gameBotConfigs :: [(ID, String)], -- Configuración de bots para el menú [(id, tipo)]
     gameTime :: Scalar, -- Tiempo actual del juego
     gameFrame :: Int, -- Frame actual del juego
@@ -78,6 +79,7 @@ instance Default GameState where
       gameTournamentCurrentIndex = 1,
   gameTournamentFileCleared = False,
       gameTournamentStatsHistory = [],
+  gameTournamentCountdown = 0,
       gameSimulationSpeed = 1.5,  -- Aumentado de 1 a 1.5 para más velocidad
       gameDebugInfo = False,
       gamePaused = False,

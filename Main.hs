@@ -19,11 +19,6 @@ import UIButton
 import Control.Monad (void)
 import Control.Concurrent (forkIO)
 
--- Lista de comportamientos disponibles en orden cíclico
--- Si hay 1 bot: aggressive
--- Si hay 2 bots: aggressive, aggressive
--- Si hay 3 bots: aggressive, defensive, sniper
--- Si hay 4+ bots: se repite el ciclo
 availableBehaviors :: [String]
 availableBehaviors = ["aggressive", "defensive", "sniper"]
 

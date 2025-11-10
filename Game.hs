@@ -161,39 +161,78 @@ playGameWithCallback initialState callback = do
       preUpdateIO dt preRealTimeGS = do
         let gs = preRealTimeGS { gameSeed = gameSeed preRealTimeGS + realToFrac dt * 12347 }
             keys = gameKeysPressed gs
-            -- Incrementar temporizador del menú si estamos en el menú
-            updatedMenuTimer = if gameIsInMenu gs then gameMenuTimer gs + dt else 0
-            preUpdatedState
-              | Set.member (Char 'd') keys = gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys, gameMenuTimer = 0 }
-              | Set.member (Char '1') keys = gs { gameSimulationSpeed = 0.1, gameMenuTimer = 0 }
-              | Set.member (Char '2') keys = gs { gameSimulationSpeed = 0.25, gameMenuTimer = 0 }
-              | Set.member (Char '3') keys = gs { gameSimulationSpeed = 0.5, gameMenuTimer = 0 }
-              | Set.member (Char '4') keys = gs { gameSimulationSpeed = 0.75, gameMenuTimer = 0 }
-              | Set.member (Char '5') keys = gs { gameSimulationSpeed = 1.0, gameMenuTimer = 0 }
-              | Set.member (Char '6') keys = gs { gameSimulationSpeed = 1.25, gameMenuTimer = 0 }
-              | Set.member (Char '7') keys = gs { gameSimulationSpeed = 1.5, gameMenuTimer = 0 }
-              | Set.member (Char '8') keys = gs { gameSimulationSpeed = 2.0, gameMenuTimer = 0 }
-              | Set.member (Char '9') keys = gs { gameSimulationSpeed = 2.5, gameMenuTimer = 0 }
-              | Set.member (Char '0') keys = gs { gameSimulationSpeed = 3.0, gameMenuTimer = 0 }
-              | otherwise = gs { gameMenuTimer = updatedMenuTimer }
 
-        let nextState
-              | gameIsInMenu gs && gameMenuTimer preUpdatedState >= 5.0 = autoStartTournament preUpdatedState
-              | gameIsInMenu gs = preUpdatedState
-              | Set.member (Char 'r') keys = regenerateRobotsWithRandomPositions gs initialState
-              | Set.member (SpecialKey KeySpace) keys && gamePaused gs = updateGame dt (preUpdatedState { gamePaused = not (gamePaused gs), gameKeysPressed = Set.delete (SpecialKey KeySpace) keys })
-              | Set.member (SpecialKey KeySpace) keys && not (gamePaused gs) = preUpdatedState { gamePaused = not (gamePaused gs), gameKeysPressed = Set.delete (SpecialKey KeySpace) keys }
-              | gamePaused gs = preUpdatedState
-              | otherwise = updateGame dt preUpdatedState
+        -- Determinar el siguiente estado base: o bien procesando la cuenta atrás, o aplicando entradas/actualización
+        baseState <- if gameTournamentActive gs && gameTournamentCountdown gs > 0 then do
+          let t' = max 0 (gameTournamentCountdown gs - realToFrac dt)
+          if t' > 0 then
+            return (gs { gameTournamentCountdown = t' })
+          else do
+            -- Cuenta atrás terminó: iniciar siguiente torneo si queda
+            if gameTournamentRemaining gs > 1 then do
+              let cfgs = gameTournamentConfigs gs
+                  stage = gameStageSize gs
+                  seedBase' = deriveSeed (gameTournamentSeed gs) (gameTournamentCurrentIndex gs)
+                  currWithSeed = gs { gameSeed = seedBase' }
+                  initialTemplate = def { gameStageSize = stage
+                                        , gameBotConfigs = cfgs
+                                        , gameWindowSize = gameWindowSize gs
+                                        , gameImages = gameImages gs
+                                        , gameIsInMenu = False
+                                        , gameRobots = Map.fromList [ (rid, createBasicRobot (0,0) beh rid) | (rid, beh) <- cfgs ]
+                                        , gameTotalRobotCount = length cfgs }
+                  regenerated = regenerateRobotsWithRandomPositions currWithSeed initialTemplate
+                  ids = map fst cfgs
+                  newStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ]
+                  newRemaining = gameTournamentRemaining gs - 1
+                  newHistory = gameStats gs : gameTournamentStatsHistory gs
+                  newState = regenerated { gameStats = newStats
+                                         , gamePaused = False
+                                         , gameTournamentActive = True
+                                         , gameTournamentRemaining = newRemaining
+                                         , gameTournamentSeed = seedBase'
+                                         , gameTournamentConfigs = cfgs
+                                         , gameTournamentStatsFile = gameTournamentStatsFile gs
+                                         , gameTournamentFileCleared = gameTournamentFileCleared gs
+                                         , gameTournamentCurrentIndex = gameTournamentCurrentIndex gs + 1
+                                         , gameTournamentStatsHistory = newHistory
+                                         , gameTournamentCountdown = 0 }
+              writeIORef calledRef False
+              return newState
+            else return (gs { gameTournamentCountdown = 0 })
+        else do
+          let updatedMenuTimer = if gameIsInMenu gs then gameMenuTimer gs + dt else 0
+          let preUpdatedState
+                | Set.member (Char 'd') keys = gs { gameDebugInfo = not (gameDebugInfo gs), gameKeysPressed = Set.delete (Char 'd') keys, gameMenuTimer = 0 }
+                | Set.member (Char '1') keys = gs { gameSimulationSpeed = 0.1, gameMenuTimer = 0 }
+                | Set.member (Char '2') keys = gs { gameSimulationSpeed = 0.25, gameMenuTimer = 0 }
+                | Set.member (Char '3') keys = gs { gameSimulationSpeed = 0.5, gameMenuTimer = 0 }
+                | Set.member (Char '4') keys = gs { gameSimulationSpeed = 0.75, gameMenuTimer = 0 }
+                | Set.member (Char '5') keys = gs { gameSimulationSpeed = 1.0, gameMenuTimer = 0 }
+                | Set.member (Char '6') keys = gs { gameSimulationSpeed = 1.25, gameMenuTimer = 0 }
+                | Set.member (Char '7') keys = gs { gameSimulationSpeed = 1.5, gameMenuTimer = 0 }
+                | Set.member (Char '8') keys = gs { gameSimulationSpeed = 2.0, gameMenuTimer = 0 }
+                | Set.member (Char '9') keys = gs { gameSimulationSpeed = 2.5, gameMenuTimer = 0 }
+                | Set.member (Char '0') keys = gs { gameSimulationSpeed = 3.0, gameMenuTimer = 0 }
+                | otherwise = gs { gameMenuTimer = updatedMenuTimer }
+          let nextState
+                | gameIsInMenu gs && gameMenuTimer preUpdatedState >= 5.0 = autoStartTournament preUpdatedState
+                | gameIsInMenu gs = preUpdatedState
+                | Set.member (Char 'r') keys = regenerateRobotsWithRandomPositions gs initialState
+                | Set.member (SpecialKey KeySpace) keys && gamePaused gs = updateGame dt (preUpdatedState { gamePaused = not (gamePaused gs), gameKeysPressed = Set.delete (SpecialKey KeySpace) keys })
+                | Set.member (SpecialKey KeySpace) keys && not (gamePaused gs) = preUpdatedState { gamePaused = not (gamePaused gs), gameKeysPressed = Set.delete (SpecialKey KeySpace) keys }
+                | gamePaused gs = preUpdatedState
+                | otherwise = updateGame dt preUpdatedState
+          return nextState
 
         -- Si es un torneo y el archivo de estadísticas aún no se limpió, hacerlo ahora (en IO) y marcarlo
-        clearedState <- if gameTournamentActive nextState && not (gameTournamentFileCleared nextState)
-                        then case gameTournamentStatsFile nextState of
+        clearedState <- if gameTournamentActive baseState && not (gameTournamentFileCleared baseState)
+                        then case gameTournamentStatsFile baseState of
                                Just fp -> do
                                  writeFile fp ""
-                                 return (nextState { gameTournamentFileCleared = True })
-                               Nothing -> return nextState
-                        else return nextState
+                                 return (baseState { gameTournamentFileCleared = True })
+                               Nothing -> return baseState
+                        else return baseState
 
         -- Si la partida está pausada por haber quedado un robot, llamar al callback UNA VEZ
         let robotsLeft = length (Map.elems (gameRobots clearedState))
@@ -212,7 +251,7 @@ playGameWithCallback initialState callback = do
                 Nothing -> return ()
 
             -- llamar callback para permitir logging/estadísticas
-            mNext <- callback nextState
+            mNext <- callback baseState
             -- Si callback devuelve un estado explícito, usarlo (y continuar)
             case mNext of
               Just ns -> do
@@ -222,44 +261,8 @@ playGameWithCallback initialState callback = do
                 -- Si estamos en modo torneo y quedan partidas, crear la siguiente partida tras 2s
                 if gameTournamentActive clearedState && gameTournamentRemaining clearedState > 1
                   then do
-                    -- Esperar 2 segundos
-                    threadDelay (2 * 1000000)
-                    -- Construir siguiente GameState a partir de la configuración de torneo en el estado actual
-                    let cfgs = gameTournamentConfigs clearedState
-                        stage = gameStageSize clearedState
-                        -- Derivar semilla con más entropía para la siguiente partida
-                        seedBase' = deriveSeed (gameTournamentSeed clearedState) (gameTournamentCurrentIndex clearedState)
-                        -- Usar la semilla incrementada en el estado actual
-                        currWithSeed = clearedState { gameSeed = seedBase' }
-                        -- Plantilla inicial para regenerar usando la lógica de Game
-                        initialTemplate = def { gameStageSize = stage
-                                              , gameBotConfigs = cfgs
-                                              , gameWindowSize = gameWindowSize clearedState
-                                              , gameImages = gameImages clearedState
-                                              , gameIsInMenu = False
-                                              , gameRobots = Map.fromList [ (rid, createBasicRobot (0,0) beh rid) | (rid, beh) <- cfgs ]
-                                              , gameTotalRobotCount = length cfgs
-                                              }
-                        regenerated = regenerateRobotsWithRandomPositions currWithSeed initialTemplate
-                        ids = map fst cfgs
-                        newStats = Map.fromList [ (i, emptyRobotStats) | i <- ids ]
-                        newRemaining = gameTournamentRemaining clearedState - 1
-                        -- Agregar estadísticas actuales al historial
-                        newHistory = gameStats clearedState : gameTournamentStatsHistory clearedState
-                        newState = regenerated { gameStats = newStats
-                                               , gamePaused = False
-                                               , gameTournamentActive = True
-                                               , gameTournamentRemaining = newRemaining
-                                               , gameTournamentSeed = seedBase'
-                                               , gameTournamentConfigs = cfgs
-                                               , gameTournamentStatsFile = gameTournamentStatsFile clearedState
-                                               , gameTournamentFileCleared = gameTournamentFileCleared clearedState
-                                               , gameTournamentCurrentIndex = gameTournamentCurrentIndex clearedState + 1
-                                               , gameTournamentStatsHistory = newHistory
-                                               }
-                    -- Permitir que el callback pueda dispararse de nuevo en la próxima partida
-                    writeIORef calledRef False
-                    return newState
+                    -- Iniciar cuenta atrás de 3 segundos para el siguiente torneo
+                    return (clearedState { gameTournamentCountdown = 3.0 })
                   else do
                     -- Último torneo terminado - escribir estadísticas agregadas
                     when (gameTournamentActive clearedState) $ do
@@ -271,7 +274,7 @@ playGameWithCallback initialState callback = do
                           hClose h
                         Nothing -> return ()
                     return clearedState
-          else return nextState
+          else return baseState
 
   playIO window backgroundColor fps initialState drawIO handleIO preUpdateIO
 
