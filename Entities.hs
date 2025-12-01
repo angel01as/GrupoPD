@@ -100,6 +100,7 @@ data Obstacle = Obs
   , obstacleHealth :: Scalar
   , obstacleTimer :: Maybe Scalar -- Solo para bombas
   , obstacleColor :: Color
+  , obstacleHitCount :: Int
   } deriving (Show, Eq)
 
 instance GameEntity Obstacle where

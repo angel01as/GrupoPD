@@ -4,6 +4,7 @@ module Robot (
   -- Con tipo data(..) se exporta todo lo que tiene, constructor incluido.
   Robot(..),
   Turret(..),
+  RobotSpriteProfile(..),
   MovementAction(..),
   MemoryValue(..),
   detectedAgent,
@@ -18,12 +19,58 @@ module Robot (
   multiplyMovementAction,
   getMovementActionValue,
   rotateTurretTowards,
-  setTurretAngle
+  setTurretAngle,
+  spriteProfileFor
 ) where
 
 import Entities
 import Geometry
 import qualified Data.Map as Map
+
+data RobotSpriteProfile = RobotSpriteProfile
+  {
+    rspBodySpritePixels :: (Float, Float),
+    rspTurretSpritePixels :: (Float, Float),
+    rspBodyHeightMeters :: Scalar,
+    rspTurretForwardOffsetRatio :: Scalar,
+    rspTurretScale :: Scalar,
+    rspCollisionScale :: Scalar
+  } deriving (Show, Eq)
+
+spriteProfileFor :: String -> RobotSpriteProfile
+spriteProfileFor behavior = case behavior of
+  "aggressive" -> mkProfile (628, 360) (666, 273) 12 1.0 0.88
+  "defensive"  -> mkProfile (843, 503) (917, 326) 12 1.0 0.88
+  "sniper"     -> mkProfile (551, 256) (975, 233) 10.0 0.78 0.88
+  _             -> mkProfile (512, 512) (512, 200) 12 1.0 0.88
+  where
+    mkProfile :: (Float, Float) -> (Float, Float) -> Scalar -> Scalar -> Scalar -> RobotSpriteProfile
+    mkProfile bodyPx turretPx bodyHeight turretScale collisionScale = RobotSpriteProfile
+      { rspBodySpritePixels = bodyPx
+      , rspTurretSpritePixels = turretPx
+      , rspBodyHeightMeters = bodyHeight
+      , rspTurretForwardOffsetRatio = 0.25
+      , rspTurretScale = turretScale
+      , rspCollisionScale = collisionScale
+      }
+
+profileBodySize :: RobotSpriteProfile -> Size
+profileBodySize profile = (widthMeters, heightMeters)
+  where
+    (bodyPxW, bodyPxH) = rspBodySpritePixels profile
+    heightMeters = rspBodyHeightMeters profile
+    aspectRatio = bodyPxW / bodyPxH
+    widthMeters = aspectRatio * heightMeters
+
+centeredRectangleFromSize :: Size -> [Point]
+centeredRectangleFromSize (w, h) =
+  [(-halfW, -halfH), (halfW, -halfH), (halfW, halfH), (-halfW, halfH)]
+  where
+    halfW = w / 2
+    halfH = h / 2
+
+uniformScaleSize :: Scalar -> Size -> Size
+uniformScaleSize factor (w, h) = (w * factor, h * factor)
 
 data Robot = Rob
   { 
@@ -142,16 +189,35 @@ shootProjectile :: Robot -> Maybe Projectile
 shootProjectile r 
   | canShoot r = Just $ Proj
     { 
-      projectilePosition = position r,
-      projectileVelocity = prodByScalar 60 (angleFactor (turretOrientation (robotTurret r))),
-      projectileVertices = map (add2D (position r))[(0,0), (0.5,0), (0.5,0.5), (0,0.5)],
-      projectileSize = (0.5, 0.5),
+      projectilePosition = projectilePos,
+      projectileVelocity = prodByScalar 60 muzzleDirection,
+      projectileVertices = projectileVerts,
+      projectileSize = (projectileLength, projectileThickness),
       projectileOrientation = turretOrientation (robotTurret r),
       projectileDamage = turretDamage (robotTurret r),
       projectileID = -1,
       projectileOwnerID = robotID r
     }
   | otherwise = Nothing
+  where
+    turretAngle = turretOrientation (robotTurret r)
+    muzzleDirection = angleFactor turretAngle
+    profile = spriteProfileFor (robotBehavior r)
+    (bodyPxW, bodyPxH) = rspBodySpritePixels profile
+    (turretPxW, turretPxH) = rspTurretSpritePixels profile
+    (sx, sy) = size r
+    turretScale = rspTurretScale profile
+    turretWidthMeters = sx * (turretPxW / bodyPxW) * turretScale
+    turretHeightMeters = sy * (turretPxH / bodyPxH) * turretScale
+    projectileThickness = turretHeightMeters * 0.22
+    projectileAspectRatio = 887 / 236
+    projectileLength = projectileThickness * projectileAspectRatio
+    turretForwardOffset = sx * rspTurretForwardOffsetRatio profile
+    muzzleOffset = turretForwardOffset + turretWidthMeters / 2
+    projectileCenterOffset = muzzleOffset + projectileLength / 2
+    projectilePos = add2D (position r) (prodByScalar projectileCenterOffset muzzleDirection)
+    projectileLocalVerts = centeredRectangleFromSize (projectileLength, projectileThickness)
+    projectileVerts = map (add2D projectilePos) (rotateVertices projectileLocalVerts turretAngle)
 
 -- Actualiza el robot después de disparar (reinicia cooldown)
 afterShooting :: Robot -> Robot
@@ -167,18 +233,18 @@ createBasicRobot :: Position -> String -> ID -> Robot
 createBasicRobot pos behaviorName newID = Rob
   { robotPosition = pos
   , robotVelocity = (0, 0)
-  , robotSize = (6, 6)  -- Aumentado a (6, 6) para que se vean mejor
-  , robotVertices = map (add2D pos) [(-3, -3), (3, -3), (3, 3), (-3, 3)]  -- Ajustado para el nuevo tamaño
+  , robotSize = baseSize
+  , robotVertices = map (add2D pos) collisionVerts
   , robotEnergy = 100
   , robotMaxEnergy = 100
-  , robotRadarRange = 28
+  , robotRadarRange = behaviorRadarRange
   , robotOrientation = 0
   , robotTurret = Turr
     { turretOrientation = 0
     , turretCooldown = 0
-    , turretMaxCooldown = 1.0
-    , turretDamage = 20
-    , turretRange = 26
+    , turretMaxCooldown = behaviorTurretMaxCooldown
+    , turretDamage = behaviorTurretDamage
+    , turretRange = behaviorTurretRange
     }
   , robotMemory = Map.empty
   , robotBehavior = behaviorName
@@ -186,6 +252,19 @@ createBasicRobot pos behaviorName newID = Rob
   , robotCurrentInstruction = Nothing,
     robotID = newID
   }
+  where
+    profile = spriteProfileFor behaviorName
+    baseSize = profileBodySize profile
+    collisionSize = uniformScaleSize (rspCollisionScale profile) baseSize
+    collisionVerts = centeredRectangleFromSize collisionSize
+    (behaviorRadarRange, behaviorTurretRange, behaviorTurretMaxCooldown, behaviorTurretDamage) = behaviorCombatProfile behaviorName
+
+behaviorCombatProfile :: String -> (Scalar, Scalar, Scalar, Scalar)
+behaviorCombatProfile behavior = case behavior of
+  "sniper"    -> (38, 42, 0.65, 24)
+  "aggressive"-> (30, 28, 0.9, 22)
+  "defensive" -> (32, 30, 1.05, 18)
+  _            -> (28, 26, 1.0, 20)
 
 -- ============================================================================
 -- FUNCIONES PARA CONTROLAR LA TORRETA

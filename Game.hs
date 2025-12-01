@@ -555,19 +555,56 @@ updateGame dt oldState = finalState
       where
         hazardDamage = 15 :: Float  -- Daño instantáneo por colisión (más que robot-robot que es 10 DPS)
 
-        -- Robot sólido: detener, retroceder POCO y girar 90° (sin empujar/atravesar)
+        -- Robot sólido: resolver penetración y deslizar suavemente alrededor del obstáculo
         solidStep :: GameState -> GameState
         solidStep s = foldl applySolid s solidCollisions
           where
             -- Recalcular colisiones PARA SOLID con el estado actual
             solidCollisions = detectRobotObstacleCollisions (Map.elems $ gameRobots s) (Map.elems $ gameObstacles s)
-            applySolid acc (r, o, _push)
+            applySolid acc (r, o, push)
               | obstacleType o /= Solid = acc
               | otherwise =
-                  let stopped = setVelocity r (0,0)
-                      backed  = updateRobotVelocity stopped (R.MoveBackward 0.5)  -- Reducido de 1.5 a 0.5
-                      rotated = updateRobotVelocity backed (R.Rotate (pi/2))
-                  in acc { gameRobots = Map.insert (robotID r) rotated (gameRobots acc) }
+                  case Map.lookup (robotID r) (gameRobots acc) of
+                    Nothing -> acc
+                    Just currentRobot ->
+                      let resolvedRobot = resolvePenetration currentRobot push
+                          normal = normalizeVec push
+                          tangent = ensureNonZero (perp normal)
+                          glideDir = if dotVec (velocity resolvedRobot) tangent >= 0 then tangent else negateVec tangent
+                          desiredDir = normalizeVec (add2D (prodByScalar 0.8 glideDir) (prodByScalar 0.2 (angleFactor (orientation resolvedRobot))))
+                          desiredAngle = atan2 (snd desiredDir) (fst desiredDir)
+                          turnStep = clampRange (normalizeAngleLocal (desiredAngle - orientation resolvedRobot)) (-pi/18, pi/18)
+                          orientedRobot = updateRobotVelocity (setVelocity resolvedRobot (prodByScalar 0.25 (velocity resolvedRobot))) (R.Rotate turnStep)
+                          blendedVelocity = add2D (prodByScalar 1.1 desiredDir) (prodByScalar 0.3 (velocity orientedRobot))
+                          finalRobot = setVelocity orientedRobot blendedVelocity
+                      in acc { gameRobots = Map.insert (robotID finalRobot) finalRobot (gameRobots acc) }
+
+            resolvePenetration :: Robot -> (Float, Float) -> Robot
+            resolvePenetration robot pushVec =
+              let translation = prodByScalar 1.05 pushVec
+                  newPos = add2D (position robot) translation
+                  newVerts = translateVertices (vertices robot) translation
+              in setVertices (setPosition robot newPos) newVerts
+
+            normalizeVec :: (Float, Float) -> (Float, Float)
+            normalizeVec (x, y)
+              | mag < 1e-5 = (0,0)
+              | otherwise = (x / mag, y / mag)
+              where mag = sqrt (x*x + y*y)
+
+            dotVec :: (Float, Float) -> (Float, Float) -> Float
+            dotVec (x1, y1) (x2, y2) = x1 * x2 + y1 * y2
+
+            negateVec :: (Float, Float) -> (Float, Float)
+            negateVec (x, y) = (-x, -y)
+
+            ensureNonZero :: (Float, Float) -> (Float, Float)
+            ensureNonZero v@(x, y)
+              | abs x < 1e-5 && abs y < 1e-5 = (0,1)
+              | otherwise = v
+
+            normalizeAngleLocal :: Float -> Float
+            normalizeAngleLocal a = atan2 (sin a) (cos a)
 
         hazardStep :: GameState -> GameState
         hazardStep s =
@@ -674,7 +711,19 @@ updateGame dt oldState = finalState
         -- Las bombas NO bloquean proyectiles ni se activan con ellos
         step acc (p, o)
           | obstacleType o == Bomb = acc    -- pasar de largo
-          | otherwise = acc { gameProjectiles = Map.delete (projectileID p) (gameProjectiles acc) }
+          | otherwise =
+              let accWithoutProjectile = acc { gameProjectiles = Map.delete (projectileID p) (gameProjectiles acc) }
+              in case Map.lookup (obstacleID o) (gameObstacles accWithoutProjectile) of
+                   Nothing -> accWithoutProjectile
+                   Just currentObstacle ->
+                     case obstacleType currentObstacle of
+                       Solid ->
+                         let newHits = obstacleHitCount currentObstacle + 1
+                         in if newHits >= 4
+                               then accWithoutProjectile { gameObstacles = Map.delete (obstacleID currentObstacle) (gameObstacles accWithoutProjectile) }
+                               else let updatedObstacle = currentObstacle { obstacleHitCount = newHits }
+                                    in accWithoutProjectile { gameObstacles = Map.insert (obstacleID currentObstacle) updatedObstacle (gameObstacles accWithoutProjectile) }
+                       _ -> accWithoutProjectile
 
     afterObstacles = handleProjectileObstacle (handleObstacleEffects collisionState)
 

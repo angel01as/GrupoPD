@@ -23,14 +23,14 @@ module AI (
 
 import Robot (Robot(..), MovementAction(..), Turret(..), MemoryValue(..), isRobotAlive, detectedAgent, updateRobotVelocity, shootProjectile, afterShooting, updateTurretCooldown, multiplyMovementAction)
 import Entities (Projectile(..), GameEntity(..), Explosion(..), ID, Obstacle(..), ObstacleType(..))
-import Geometry (Angle, Scalar, distanceBetween, angleToTarget)
+import Geometry (Angle, Scalar, distanceBetween, angleToTarget, clampRange)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.List (minimumBy)
 import Prelude hiding (sequence, repeat)
 import GameState
 import Debug.Trace
-import Geometry (add2D, angleFactor, prodByScalar, deg2rad)
+import Geometry (add2D, angleFactor, prodByScalar, deg2rad, sub2D)
 import Collisions (willCollideNextFrame)
 -- ============================================================================
 -- DSL PARA ACCIONES DEL BOT
@@ -323,24 +323,33 @@ sniperBot gs robot =
           targetPos = position enemy
           distToEnemy = distanceBetween (position robot) targetPos
           (turretStep, turretAligned) = adjustTurretAngle "sniper" gs robot
-          optimal = 32
+          bodyTarget = angleToTarget (position robot) targetPos
+          (bodyStep, _) = interpolateAngle (orientation robot) bodyTarget 1.4
+          turretRangeMax = turretRange (robotTurret robot)
+          optimal = max 26 (turretRangeMax - 6)
       in if hasEnemy
          then sequence [
            setMemory "mode" (StringValue "sniping"),
-           rotateTurret turretStep, -- solo torreta
-           ifThenElse (BoolCondition (distToEnemy > optimal + 3))
-             (move 0.25)
-             (ifThenElse (BoolCondition (distToEnemy < optimal - 3))
-                (moveBackward 0.2)  -- Reducido de 0.35 a 0.2
-                (Simple DoNothingCommand)
+           rotate bodyStep,
+           rotateTurret turretStep,
+           ifThenElse (BoolCondition (distToEnemy > turretRangeMax - 4))
+             (move 0.55)
+             (ifThenElse (BoolCondition (distToEnemy > optimal + 2))
+                (move 0.35)
+                (ifThenElse (BoolCondition (distToEnemy < optimal - 4))
+                   (moveBackward 0.3)
+                   (Simple DoNothingCommand)
+                )
              ),
            ifThen (BoolCondition turretAligned) shoot,
-           wait 0.15
+           wait 0.08
          ]
       else sequence [
            setMemory "mode" (StringValue "searching"),
+           rotate (pi/30),
+           move 0.25,
            rotateTurret (fst (adjustTurretAngle "sniper" gs robot)),
-           wait 0.25
+           wait 0.12
          ]
     )
 
@@ -608,17 +617,43 @@ avoidObstacleSmartImmediate gs r =
   in if null imminent
        then r
        else
-         let (ox, oy) = obstaclePosition (head imminent)
-             (rx, ry) = position r
-             _dx = rx - ox; dy = ry - oy
-             -- alternar signo cuando hay múltiples obstáculos cercanos para desbloquear
-             baseTurn = if dy > 0 then (pi/2) else (-pi/2)
-             altSign = if length imminent > 1 && (gameFrame gs + robotID r) `mod` 2 == 0 then (-1) else 1 :: Int
-             turn = fromIntegral altSign * baseTurn
-             stopped = setVelocity r (0,0)
-             backed  = updateRobotVelocity stopped (MoveBackward 0.8)
-             rotated = updateRobotVelocity backed (Rotate turn)
-         in rotated
+         let robotPos = position r
+             headingVec = angleFactor (orientation r)
+             normals = map (normalFromObstacle robotPos) imminent
+             combinedNormal = normalize2D (foldl add2D (0,0) normals)
+             normalDir = if isZeroVec combinedNormal then headingVec else combinedNormal
+             slideLeft = perp normalDir
+             slideRight = perp (negateVec normalDir)
+             preferredSlide = if dot headingVec slideLeft >= dot headingVec slideRight then slideLeft else slideRight
+             desiredDir = normalize2D (add2D (prodByScalar 0.65 preferredSlide) (prodByScalar 0.35 normalDir))
+             desiredAngle = atan2 (snd desiredDir) (fst desiredDir)
+             turnNeeded = clampRange (normalizeAngle (desiredAngle - orientation r)) (-pi/3, pi/3)
+             damped = setVelocity r (prodByScalar 0.25 (velocity r))
+             rotated = updateRobotVelocity damped (Rotate (turnNeeded * 0.8))
+             steerSpeed = 0.9 + fromIntegral (length imminent) * 0.15
+             newVelocity = prodByScalar steerSpeed desiredDir
+         in setVelocity rotated newVelocity
+  where
+    normalFromObstacle :: (Float, Float) -> Obstacle -> (Float, Float)
+    normalFromObstacle robotPos' o = normalize2D (sub2D robotPos' (obstaclePosition o))
+
+    normalize2D :: (Float, Float) -> (Float, Float)
+    normalize2D (x, y)
+      | mag < 1e-4 = (0,0)
+      | otherwise = (x / mag, y / mag)
+      where mag = sqrt (x*x + y*y)
+
+    perp :: (Float, Float) -> (Float, Float)
+    perp (x, y) = (-y, x)
+
+    dot :: (Float, Float) -> (Float, Float) -> Float
+    dot (x1, y1) (x2, y2) = x1 * x2 + y1 * y2
+
+    negateVec :: (Float, Float) -> (Float, Float)
+    negateVec (x, y) = (-x, -y)
+
+    isZeroVec :: (Float, Float) -> Bool
+    isZeroVec (x, y) = abs x < 1e-4 && abs y < 1e-4
 
 -- Resetea bloqueos si detecta estados antiguos o esperas absurdas (para compatibilidad)
 resetIfStuck :: Robot -> Scalar -> BotInstruction

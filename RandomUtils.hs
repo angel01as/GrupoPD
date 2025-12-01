@@ -153,10 +153,22 @@ generateRandomObstaclesWithRobots (w,h) seed robotPositions = generateObstaclesS
              else let t = case forced of { Just ft -> ft; Nothing -> pickType rid }
                   in Just (mkObs rid pos t)
 
+    solidSpritePixels :: (Float, Float)
+    solidSpritePixels = (682, 703)
+
+    solidObstacleHeightMeters :: Float
+    solidObstacleHeightMeters = 14
+
+    solidObstacleWidthMeters :: Float
+    solidObstacleWidthMeters = solidObstacleHeightMeters * fst solidSpritePixels / snd solidSpritePixels
+
+    solidObstacleSizeMeters :: Size
+    solidObstacleSizeMeters = (solidObstacleWidthMeters, solidObstacleHeightMeters)
+
     mkObs :: Int -> (Float,Float) -> ObstacleType -> Obstacle
     mkObs rid pos t =
       let (shape, sz, col) = case t of
-            Solid  -> (Square, (10,10), greyN 0.5)              -- GRIS - Solo impide el paso
+            Solid  -> (Square, solidObstacleSizeMeters, greyN 0.5)              -- GRIS - Solo impide el paso
             Hazard -> (Circle, (8,8), makeColor 1 0 0 0.9)      -- ROJO - Hace daño constante
             Bomb   -> (Square, (7,7), makeColor 1 1 0 0.9)      -- AMARILLO - Cuenta atrás y explosión
           localVerts = case shape of
@@ -173,7 +185,8 @@ generateRandomObstaclesWithRobots (w,h) seed robotPositions = generateObstaclesS
              , obstacleOrientation = 0
              , obstacleHealth = 100
              , obstacleTimer = Nothing
-             , obstacleColor = col
+              , obstacleColor = col
+              , obstacleHitCount = 0
              }
 
     -- Utilidades de geometría para formas

@@ -3,7 +3,7 @@ module Rendering(drawGame, usedImages) where
 import Graphics.Gloss hiding (Vector, Point)
 import Entities
 import GameState
-import Robot(Robot(..), Turret(..), isRobotAlive)
+import Robot(Robot(..), Turret(..), isRobotAlive, RobotSpriteProfile(..), spriteProfileFor)
 import Geometry
 import qualified Data.Map as Map
 import UIButton
@@ -26,12 +26,18 @@ defensiveBotTurretPath = "images/defensiveBot/robot_turret.png"
 sniperBotTurretPath = "images/sniperBot/robot_turret.png"
 
 projectileImagePath = "images/projectile.png"
+projectileSpriteWidthPx :: Float
+projectileSpriteWidthPx = 887
+projectileSpriteHeightPx :: Float
+projectileSpriteHeightPx = 236
 
 -- Sprites de explosión de proyectil
-explosionSprite1Path = "images/explosion/a.png"
-explosionSprite2Path = "images/explosion/aa.png"
-explosionSprite3Path = "images/explosion/aaa.png"
-explosionSprite4Path = "images/explosion/aaaa.png"
+explosionSprite1Path = "images/explosion/1.png"
+explosionSprite2Path = "images/explosion/2.png"
+explosionSprite3Path = "images/explosion/3.png"
+explosionSprite4Path = "images/explosion/4.png"
+explosionSprite5Path = "images/explosion/5.png"
+explosionSprite6Path = "images/explosion/6.png"
 
 -- Sprites de colisión tanque-tanque
 collisionSprite1Path = "images/collisionEffect/collision_effect1.png"
@@ -45,16 +51,24 @@ robotDeathSprite3Path = "images/deathEffect/death_effect3.png"
 robotDeathSprite4Path = "images/deathEffect/death_effect4.png"
 
 solidObstaclePath = "images/obstacles/ruin1.png"
+solidObstacleDamaged1Path = "images/obstacles/ruin1_.png"
+solidObstacleDamaged2Path = "images/obstacles/ruin1_1.png"
 hazardObstaclePath = "images/obstacles/hazard.png"
 mineObstaclePath = "images/obstacles/mine.png"
+solidObstacleSpriteWidthPx :: Float
+solidObstacleSpriteWidthPx = 682
+solidObstacleSpriteHeightPx :: Float
+solidObstacleSpriteHeightPx = 703
 
 
 usedImages = [backgroundImagePath, aggressiveBotBodyPath, defensiveBotBodyPath, sniperBotBodyPath,
               aggressiveBotTurretPath, defensiveBotTurretPath, sniperBotTurretPath, projectileImagePath,
               explosionSprite1Path, explosionSprite2Path, explosionSprite3Path, explosionSprite4Path,
+              explosionSprite5Path, explosionSprite6Path,
               collisionSprite1Path, collisionSprite2Path, collisionSprite3Path,
               robotDeathSprite1Path, robotDeathSprite2Path, robotDeathSprite3Path, robotDeathSprite4Path,
-              solidObstaclePath, hazardObstaclePath, mineObstaclePath]
+              solidObstaclePath, solidObstacleDamaged1Path, solidObstacleDamaged2Path,
+              hazardObstaclePath, mineObstaclePath]
 
 -- gmap es un fmap sobre un Map que devuelve el resultado como lista.
 gmap :: (Ord k) => (v -> w) -> Map.Map k v -> [w]
@@ -141,42 +155,55 @@ drawGame gs
         (sx, sy) = size r
         robotOrientation = -radToDeg (orientation r) -- Gloss usa rotación en sentido horario expresada en grados y nosotros rotación antihoraria expresada en radianes.
         turretAngle = -radToDeg (turretOrientation (robotTurret r))
+        profile = spriteProfileFor (robotBehavior r)
+        (bodySpriteW, bodySpriteH) = rspBodySpritePixels profile
+        (turretSpriteW, turretSpriteH) = rspTurretSpritePixels profile
+        turretOffsetRatio = rspTurretForwardOffsetRatio profile
+        tankScaleX = meter2Pixel gs sx / bodySpriteW
+        tankScaleY = meter2Pixel gs sy / bodySpriteH
+        turretScale = rspTurretScale profile
+        turretWidthMeters = sx * (turretSpriteW / bodySpriteW) * turretScale
+        turretHeightMeters = sy * (turretSpriteH / bodySpriteH) * turretScale
+        turretScaleX = meter2Pixel gs turretWidthMeters / turretSpriteW
+        turretScaleY = meter2Pixel gs turretHeightMeters / turretSpriteH
         
         -- Tanque (cuerpo del robot) - usando sprite
 
         tankSprite = case robotBehavior r of
           "aggressive" -> case Map.lookup aggressiveBotBodyPath (gameImages gs) of
                               Just img -> img
-                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid bodySpriteW bodySpriteH
           "defensive" -> case Map.lookup defensiveBotBodyPath (gameImages gs) of
                               Just img -> img
-                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+                              Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid bodySpriteW bodySpriteH
           "sniper" -> case Map.lookup sniperBotBodyPath (gameImages gs) of
                           Just img -> img
-                          Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
+                          Nothing -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid bodySpriteW bodySpriteH
+          _ -> Color (makeColor 0.2 0.4 0.2 1.0) $ rectangleSolid bodySpriteW bodySpriteH
 
         -- Cañón (torreta) - usando sprite
         turretSprite = case robotBehavior r of
           "aggressive" -> case Map.lookup aggressiveBotTurretPath (gameImages gs) of
                               Just img -> img
-                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid turretSpriteW turretSpriteH
           "defensive" -> case Map.lookup defensiveBotTurretPath (gameImages gs) of
                               Just img -> img
-                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+                              Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid turretSpriteW turretSpriteH
           "sniper" -> case Map.lookup sniperBotTurretPath (gameImages gs) of
                           Just img -> img
-                          Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid (meter2Pixel gs sx * 1.5 / 2) (meter2Pixel gs sy * 0.3 / 2)
+                          Nothing -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid turretSpriteW turretSpriteH
+          _ -> Color (makeColor 0.1 0.2 0.1 1.0) $ rectangleSolid turretSpriteW turretSpriteH
         
         
         tank = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
                Rotate robotOrientation $
-               Scale (meter2Pixel gs sx / 100) (meter2Pixel gs sy / 100) $  -- Escalar para que coincida con el tamaño del robot
+               Scale tankScaleX tankScaleY $  -- Escalar al tamaño real del robot
                (if isRobotAlive r then tankSprite else Color (greyN 0.5) tankSprite)
 
         turret = Translate (meter2Pixel gs x) (meter2Pixel gs y) $
                 Rotate turretAngle $
-                Translate (meter2Pixel gs sx * 0.25) 0 $  -- Offset hacia adelante
-                Scale (meter2Pixel gs sx / 80) (meter2Pixel gs sy / 120) $
+                Translate (meter2Pixel gs sx * turretOffsetRatio) 0 $  -- Offset proporcional hacia adelante
+                Scale turretScaleX turretScaleY $
                 turretSprite
         
         -- Barra de salud
@@ -212,9 +239,12 @@ drawGame gs
     drawProjectile p = 
       let (x, y) = position p
           angle = -radToDeg (projectileOrientation p)
+          (projW, projH) = size p
+          scaleX = meter2Pixel gs projW / projectileSpriteWidthPx
+          scaleY = meter2Pixel gs projH / projectileSpriteHeightPx
           projectileSprite = case Map.lookup projectileImagePath (gameImages gs) of
-            Just img -> Scale 0.5 0.5 img
-            Nothing -> Color orange $ circleSolid (meter2Pixel gs 0.5)
+            Just img -> Scale scaleX scaleY img
+            Nothing -> Color orange $ rectangleSolid (meter2Pixel gs projW) (meter2Pixel gs projH)
       in Translate (meter2Pixel gs x) (meter2Pixel gs y) $ 
          Rotate angle $
          projectileSprite
@@ -228,9 +258,18 @@ drawGame gs
           basePic colorPic = Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Color colorPic $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
           t = gameTime gs
       in case obstacleType o of
-           Solid -> case Map.lookup solidObstaclePath (gameImages gs) of 
-                      Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale 0.11 0.11 img
-                      Nothing -> basePic (greyN 0.6)
+           Solid ->
+             let hits = obstacleHitCount o
+                 spritePath
+                   | hits >= 3 = solidObstacleDamaged2Path
+                   | hits >= 2 = solidObstacleDamaged1Path
+                   | otherwise = solidObstaclePath
+             in case Map.lookup spritePath (gameImages gs) of 
+                  Just img ->
+                    let scaleX = meter2Pixel gs sx / solidObstacleSpriteWidthPx
+                        scaleY = meter2Pixel gs sy / solidObstacleSpriteHeightPx
+                    in Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale scaleX scaleY img
+                  Nothing -> basePic (greyN 0.6)
            Hazard -> case Map.lookup hazardObstaclePath (gameImages gs) of
                       Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale 0.07 0.07 img
                       Nothing -> let pulse = 0.5 + 0.5 * sin (t*4)
@@ -273,11 +312,7 @@ drawGame gs
             
             -- Seleccionar sprite según el tipo y progreso de la animación
             spritePath = case explosionType e of
-              ProjectileExplosion -> 
-                if progress < 0.25 then explosionSprite1Path
-                else if progress < 0.5 then explosionSprite2Path
-                else if progress < 0.75 then explosionSprite3Path
-                else explosionSprite4Path
+              ProjectileExplosion -> selectProjectileSprite progress
               CollisionExplosion ->
                 if progress < 0.33 then collisionSprite1Path
                 else if progress < 0.66 then collisionSprite2Path
@@ -287,10 +322,23 @@ drawGame gs
             
             -- Usar sprite si está disponible, sino círculo rojo
             explosionPic = case Map.lookup spritePath (gameImages gs) of
-              Just img -> Scale (explosionRadiusPx / 50) (explosionRadiusPx / 50) img
+              Just img ->
+                let scaleFactor = case explosionType e of
+                      ProjectileExplosion -> explosionRadiusPx / 180
+                      CollisionExplosion  -> explosionRadiusPx / 120
+                in Scale scaleFactor scaleFactor img
               Nothing -> Color (withAlpha 0.7 red) $ circleSolid explosionRadiusPx
             
         in Translate (meter2Pixel gs x) (meter2Pixel gs y) explosionPic
+
+    selectProjectileSprite :: Scalar -> String
+    selectProjectileSprite progress
+      | progress < (1/6) = explosionSprite1Path
+      | progress < (2/6) = explosionSprite2Path
+      | progress < (3/6) = explosionSprite3Path
+      | progress < (4/6) = explosionSprite4Path
+      | progress < (5/6) = explosionSprite5Path
+      | otherwise        = explosionSprite6Path
 
     -- Renderiza la interfaz de usuario
     drawUI :: GameState -> Picture
