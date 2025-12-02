@@ -19,7 +19,7 @@ import Debug.Trace (trace)
 import Geometry
 import Robot (Robot(..), Turret(..), MovementAction(..), MemoryValue(..), isRobotAlive, createBasicRobot, updateRobotVelocity)
 import qualified Robot as R
-import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), updateExplosion, isExplosionActive, isExplosionDamaging, createExplosion, Obstacle(..), ObstacleType(..), ObstacleShape(..))
+import Entities (Projectile(..), GameEntity(..), ID, Explosion(..), updateExplosion, isExplosionActive, isExplosionDamaging, createExplosion, Obstacle(..), ObstacleType(..), ObstacleShape(..), Missile(..))
 import qualified Entities as E
 import qualified AI
 import GameState
@@ -48,6 +48,9 @@ regenerateRobotsWithRandomPositions currentState initialState =
     , gameDebugInfo = gameDebugInfo currentState
     , gameWindowSize = gameWindowSize currentState
     , gameSeed = gameSeed currentState
+    , gameMissiles = Map.empty
+    , gameMissileRainTriggered = False
+    , gameTotalMissileCount = 0
   }
   where
     seedBase = gameSeed currentState
@@ -136,6 +139,9 @@ autoStartTournament s =
        , gameRobots = newRobots
        , gameObstacles = newObstacles
        , gameMenuTimer = 0
+      , gameMissiles = Map.empty
+      , gameMissileRainTriggered = False
+      , gameTotalMissileCount = 0
        , gameStats = newStats
        }
 
@@ -413,17 +419,20 @@ updateGame dt oldState = finalState
     -- Ya no necesitamos handleMapEdge complejo, el rebote suave en clampToBounds es suficiente
     edgeState = phisicsState
 
+    missileSpawnState = spawnMissileRain edgeState
+    missileUpdatedState = updateMissiles deltaTime missileSpawnState
+
     -- Predicción de colisiones Robot–Obstáculo (pre-IA)
     robotObstaclePredictions =
       [ (r, o)
-      | r <- Map.elems (gameRobots edgeState)
-      , o <- Map.elems (gameObstacles edgeState)
+      | r <- Map.elems (gameRobots missileUpdatedState)
+      , o <- Map.elems (gameObstacles missileUpdatedState)
       , willCollideNextFrame r o 0.3
       ]
 
     predictedState = foldl
       (\acc (r, _o) -> acc { gameRobots = Map.adjust (AI.avoidObstacleSmartImmediate acc) (robotID r) (gameRobots acc) })
-      edgeState
+      missileUpdatedState
       robotObstaclePredictions
 
     -- Colisiones básicas
@@ -724,6 +733,83 @@ updateGame dt oldState = finalState
                                else let updatedObstacle = currentObstacle { obstacleHitCount = newHits }
                                     in accWithoutProjectile { gameObstacles = Map.insert (obstacleID currentObstacle) updatedObstacle (gameObstacles accWithoutProjectile) }
                        _ -> accWithoutProjectile
+
+    missileRainTriggerTime = 20 :: Float
+    missileRainCount = 10 :: Int
+    missileFallSpeed = 45 :: Float
+    missileExplosionRadius = 18 :: Float
+    missileExplosionDamage = 50 :: Float
+    missileExplosionDuration = 0.9 :: Float
+    missileSpawnMargin = 8 :: Float
+
+    spawnMissileRain :: GameState -> GameState
+    spawnMissileRain state
+      | gameIsInMenu state = state
+      | gameMissileRainTriggered state = state
+      | gameTime state < missileRainTriggerTime = state
+      | otherwise = state
+          { gameMissiles = Map.union (gameMissiles state) newMissiles
+          , gameMissileRainTriggered = True
+          , gameTotalMissileCount = nextMissileID
+          }
+      where
+        (stageW, stageH) = gameStageSize state
+        topY = stageH / 2 + missileSpawnMargin
+        minX = -stageW / 2 + missileSpawnMargin
+        maxX = stageW / 2 - missileSpawnMargin
+        minTargetY = -stageH / 2 + missileSpawnMargin
+        maxTargetY = stageH / 2 - missileSpawnMargin * 2
+        timeBucket = floor (gameTime state * 17) :: Int
+        baseSeed = deriveSeed (gameSeed state) timeBucket
+        startID = gameTotalMissileCount state
+        (newMissiles, nextMissileID) = foldl buildMissile (Map.empty, startID) [0 .. missileRainCount - 1]
+
+        buildMissile (acc, curID) idx =
+          let seedLocal = baseSeed + fromIntegral idx * 13.37
+              xPos = pseudoRandomInRange seedLocal minX maxX
+              targetY = pseudoRandomInRange (seedLocal + 31.5) minTargetY maxTargetY
+              missile = Missile
+                { missileID = curID
+                , missilePosition = (xPos, topY)
+                , missileTargetY = targetY
+                , missileSpeed = missileFallSpeed
+                , missileDamage = missileExplosionDamage
+                , missileRadius = missileExplosionRadius
+                }
+          in (Map.insert curID missile acc, curID + 1)
+
+    updateMissiles :: Float -> GameState -> GameState
+    updateMissiles dt' state
+      | Map.null (gameMissiles state) = state
+      | otherwise = state
+          { gameMissiles = remainingMissiles
+          , gameExplosions = updatedExplosions
+          , gameTotalExplosionCount = finalExplosionID
+          }
+      where
+        (remainingMissiles, updatedExplosions, finalExplosionID) =
+          Map.foldlWithKey' step (Map.empty, gameExplosions state, gameTotalExplosionCount state) (gameMissiles state)
+
+        step (acc, explMap, nextEID) mid missile =
+          let (mx, my) = missilePosition missile
+              nextY = my - missileSpeed missile * dt'
+          in if nextY <= missileTargetY missile
+                then
+                  let impactPos = (mx, missileTargetY missile)
+                      newExplosion = createExplosion impactPos (missileRadius missile) (missileDamage missile) missileExplosionDuration nextEID
+                  in (acc, Map.insert nextEID newExplosion explMap, nextEID + 1)
+                else
+                  let movedMissile = missile { missilePosition = (mx, nextY) }
+                  in (Map.insert mid movedMissile acc, explMap, nextEID)
+
+    pseudoRandomInRange :: Double -> Float -> Float -> Float
+    pseudoRandomInRange seed lo hi = lo + (hi - lo) * noise seed
+
+    noise :: Double -> Float
+    noise seed = realToFrac fracPart
+      where
+        fracPart = frac (sin seed * 43758.5453)
+        frac x = x - fromIntegral (floor x :: Int)
 
     afterObstacles = handleProjectileObstacle (handleObstacleEffects collisionState)
 

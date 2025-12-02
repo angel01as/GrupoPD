@@ -6,7 +6,9 @@ module Entities (
   -- Obstáculos
   ObstacleType(..), ObstacleShape(..), Obstacle(..),
   -- Explosiones
-  createExplosion, createCollisionExplosion, updateExplosion, isExplosionActive, isExplosionDamaging
+  createExplosion, createCollisionExplosion, updateExplosion, isExplosionActive, isExplosionDamaging,
+  -- Misiles
+  Missile(..)
 ) where
 
 import Geometry (Size, Position, Scalar, Angle, Point, Velocity, add2D, prodByScalar, rotateVertices, translateVertices)
@@ -65,6 +67,15 @@ data Explosion = Expl
     explosionMaxTime :: Scalar,
     explosionVertices :: [Point],
     explosionType :: ExplosionType
+  } deriving (Show, Eq)
+
+data Missile = Missile
+  { missileID :: ID
+  , missilePosition :: Position
+  , missileTargetY :: Scalar
+  , missileSpeed :: Scalar
+  , missileDamage :: Scalar
+  , missileRadius :: Scalar
   } deriving (Show, Eq)
 
 instance GameEntity Projectile where

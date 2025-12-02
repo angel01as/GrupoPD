@@ -18,6 +18,7 @@ data GameState = GameState
     gameProjectiles :: Map.Map ID Projectile, -- Proyectiles
     gameExplosions :: Map.Map ID Explosion,
     gameObstacles :: Map.Map ID Obstacle,
+    gameMissiles :: Map.Map ID Missile,
     -- Estadísticas temporales por robot durante un torneo
     gameStats :: Map.Map ID RobotStats,
   -- Tournament control
@@ -47,7 +48,9 @@ data GameState = GameState
     gameSeed :: Double,
     gameIsInMenu :: Bool,
     gameCollisionCooldown :: Scalar,
-    gameMenuTimer :: Scalar  -- Temporizador para inicio automático de torneo
+    gameMenuTimer :: Scalar,  -- Temporizador para inicio automático de torneo
+    gameMissileRainTriggered :: Bool,
+    gameTotalMissileCount :: Int
   } deriving (Show, Eq)
 
 
@@ -62,6 +65,7 @@ instance Default GameState where
       gameFrame = 0,
       gameExplosions = Map.empty,
       gameObstacles = Map.empty,
+      gameMissiles = Map.empty,
       gameBotConfigs = [],
       gameStageSize = (100, 50),
       gameImages = Map.empty,
@@ -87,7 +91,9 @@ instance Default GameState where
       gameIsInMenu = True,
       gameSeed = 0,
       gameCollisionCooldown = 0,
-      gameMenuTimer = 0
+      gameMenuTimer = 0,
+      gameMissileRainTriggered = False,
+      gameTotalMissileCount = 0
     }
 
   -- Estadísticas por robot durante un torneo

@@ -31,6 +31,12 @@ projectileSpriteWidthPx = 887
 projectileSpriteHeightPx :: Float
 projectileSpriteHeightPx = 236
 
+missileSpritePath = "images/bombas/bomba.png"
+missileSpriteWidthPx :: Float
+missileSpriteWidthPx = 512
+missileSpriteHeightPx :: Float
+missileSpriteHeightPx = 512
+
 -- Sprites de explosión de proyectil
 explosionSprite1Path = "images/explosion/1.png"
 explosionSprite2Path = "images/explosion/2.png"
@@ -68,7 +74,8 @@ usedImages = [backgroundImagePath, aggressiveBotBodyPath, defensiveBotBodyPath, 
               collisionSprite1Path, collisionSprite2Path, collisionSprite3Path,
               robotDeathSprite1Path, robotDeathSprite2Path, robotDeathSprite3Path, robotDeathSprite4Path,
               solidObstaclePath, solidObstacleDamaged1Path, solidObstacleDamaged2Path,
-              hazardObstaclePath, mineObstaclePath]
+              hazardObstaclePath, mineObstaclePath,
+              missileSpritePath]
 
 -- gmap es un fmap sobre un Map que devuelve el resultado como lista.
 gmap :: (Ord k) => (v -> w) -> Map.Map k v -> [w]
@@ -112,7 +119,7 @@ drawGame gs
   | otherwise = regularGameInfo
   where
     regularGameInfo =
-      let base = Pictures [background, obstaclesPic, robotsPic, projectilesPic, explosionsPic, ui]
+      let base = Pictures [background, obstaclesPic, robotsPic, missilesPic, projectilesPic, explosionsPic, ui]
           withWinner = case Map.elems (gameRobots gs) of
                           [winner] -> Pictures [base, drawWinnerScreen winner]
                           _        -> base
@@ -136,6 +143,7 @@ drawGame gs
     robotsPic = Pictures (gmap drawRobot (gameRobots gs))
     obstaclesPic = Pictures (gmap drawObstacle (gameObstacles gs))
     projectilesPic = Pictures (gmap drawProjectile (gameProjectiles gs))
+    missilesPic = Pictures (gmap drawMissile (gameMissiles gs))
     explosionsPic = Pictures (gmap drawExplosion (gameExplosions gs))
     ui = drawUI gs
 
@@ -249,6 +257,18 @@ drawGame gs
          Rotate angle $
          projectileSprite
 
+    drawMissile :: Missile -> Picture
+    drawMissile m =
+      let (x, y) = missilePosition m
+          missileWidthMeters = 4.0
+          missileHeightMeters = 8.0
+          scaleX = meter2Pixel gs missileWidthMeters / missileSpriteWidthPx
+          scaleY = meter2Pixel gs missileHeightMeters / missileSpriteHeightPx
+          baseSprite = case Map.lookup missileSpritePath (gameImages gs) of
+            Just img -> Scale scaleX scaleY img
+            Nothing -> Color (makeColor 0.9 0.9 0.1 1.0) $ rectangleSolid (meter2Pixel gs missileWidthMeters) (meter2Pixel gs missileHeightMeters)
+      in Translate (meter2Pixel gs x) (meter2Pixel gs y) baseSprite
+
     drawExplosion :: Explosion -> Picture
     -- Renderiza un obstáculo con estilo simple por tipo
     drawObstacle :: Obstacle -> Picture
@@ -324,8 +344,8 @@ drawGame gs
             explosionPic = case Map.lookup spritePath (gameImages gs) of
               Just img ->
                 let scaleFactor = case explosionType e of
-                      ProjectileExplosion -> explosionRadiusPx / 180
-                      CollisionExplosion  -> explosionRadiusPx / 120
+                      ProjectileExplosion -> explosionRadiusPx / 260
+                      CollisionExplosion  -> explosionRadiusPx / 180
                 in Scale scaleFactor scaleFactor img
               Nothing -> Color (withAlpha 0.7 red) $ circleSolid explosionRadiusPx
             
