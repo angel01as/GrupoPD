@@ -10,6 +10,7 @@ import UIButton
 import WindowSizeState
 import Collisions (willCollideNextFrame)
 import Data.Char (toUpper)
+import Data.List (find)
 
 import Numeric (showFFloat)
 import Graphics.Gloss.Juicy (loadJuicy)
@@ -37,6 +38,14 @@ missileSpriteWidthPx = 512
 missileSpriteHeightPx :: Float
 missileSpriteHeightPx = 512
 
+airplaneSpritePath = "images/avioneta/avioneta.png"
+airplaneSpriteWidthPx :: Float
+airplaneSpriteWidthPx = 1024
+airplaneSpriteHeightPx :: Float
+airplaneSpriteHeightPx = 512
+
+menuBackgroundPath = "images/interfaz_inicial/nombre.jpg"
+
 -- Sprites de explosión de proyectil
 explosionSprite1Path = "images/explosion/1.png"
 explosionSprite2Path = "images/explosion/2.png"
@@ -61,6 +70,12 @@ solidObstacleDamaged1Path = "images/obstacles/ruin1_.png"
 solidObstacleDamaged2Path = "images/obstacles/ruin1_1.png"
 hazardObstaclePath = "images/obstacles/hazard.png"
 mineObstaclePath = "images/obstacles/mine.png"
+hazardSpriteFPath = "images/hazard_animation/F.png"
+hazardSpriteUPath = "images/hazard_animation/U.png"
+hazardSpriteEPath = "images/hazard_animation/E.png"
+hazardSpriteGPath = "images/hazard_animation/G.png"
+hazardSpriteOPath = "images/hazard_animation/O.png"
+hazardAnimationPaths = [hazardSpriteFPath, hazardSpriteUPath, hazardSpriteEPath, hazardSpriteGPath, hazardSpriteOPath]
 solidObstacleSpriteWidthPx :: Float
 solidObstacleSpriteWidthPx = 682
 solidObstacleSpriteHeightPx :: Float
@@ -75,7 +90,10 @@ usedImages = [backgroundImagePath, aggressiveBotBodyPath, defensiveBotBodyPath, 
               robotDeathSprite1Path, robotDeathSprite2Path, robotDeathSprite3Path, robotDeathSprite4Path,
               solidObstaclePath, solidObstacleDamaged1Path, solidObstacleDamaged2Path,
               hazardObstaclePath, mineObstaclePath,
-              missileSpritePath]
+              hazardSpriteFPath, hazardSpriteUPath, hazardSpriteEPath, hazardSpriteGPath, hazardSpriteOPath,
+              missileSpritePath,
+              menuBackgroundPath,
+              airplaneSpritePath]
 
 -- gmap es un fmap sobre un Map que devuelve el resultado como lista.
 gmap :: (Ord k) => (v -> w) -> Map.Map k v -> [w]
@@ -119,7 +137,7 @@ drawGame gs
   | otherwise = regularGameInfo
   where
     regularGameInfo =
-      let base = Pictures [background, obstaclesPic, robotsPic, missilesPic, projectilesPic, explosionsPic, ui]
+      let base = Pictures [background, airplanePic, obstaclesPic, robotsPic, missilesPic, projectilesPic, explosionsPic, ui]
           withWinner = case Map.elems (gameRobots gs) of
                           [winner] -> Pictures [base, drawWinnerScreen winner]
                           _        -> base
@@ -144,6 +162,7 @@ drawGame gs
     obstaclesPic = Pictures (gmap drawObstacle (gameObstacles gs))
     projectilesPic = Pictures (gmap drawProjectile (gameProjectiles gs))
     missilesPic = Pictures (gmap drawMissile (gameMissiles gs))
+    airplanePic = maybe Blank drawAirplane (gameAirplane gs)
     explosionsPic = Pictures (gmap drawExplosion (gameExplosions gs))
     ui = drawUI gs
 
@@ -269,6 +288,17 @@ drawGame gs
             Nothing -> Color (makeColor 0.9 0.9 0.1 1.0) $ rectangleSolid (meter2Pixel gs missileWidthMeters) (meter2Pixel gs missileHeightMeters)
       in Translate (meter2Pixel gs x) (meter2Pixel gs y) baseSprite
 
+    drawAirplane :: AirplaneState -> Picture
+    drawAirplane plane =
+      let widthMeters = 32.0
+          heightMeters = 12.0
+          scaleX = meter2Pixel gs widthMeters / airplaneSpriteWidthPx
+          scaleY = meter2Pixel gs heightMeters / airplaneSpriteHeightPx
+          sprite = case Map.lookup airplaneSpritePath (gameImages gs) of
+            Just img -> Scale scaleX scaleY img
+            Nothing -> Color (makeColor 0.6 0.6 0.7 1.0) $ rectangleSolid (meter2Pixel gs widthMeters) (meter2Pixel gs heightMeters)
+      in Translate (meter2Pixel gs (airplaneX plane)) (meter2Pixel gs (airplaneY plane)) sprite
+
     drawExplosion :: Explosion -> Picture
     -- Renderiza un obstáculo con estilo simple por tipo
     drawObstacle :: Obstacle -> Picture
@@ -277,7 +307,7 @@ drawGame gs
           (sx, sy) = obstacleSize o
           basePic colorPic = Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Color colorPic $ rectangleSolid (meter2Pixel gs sx) (meter2Pixel gs sy)
           t = gameTime gs
-      in case obstacleType o of
+          in case obstacleType o of
            Solid ->
              let hits = obstacleHitCount o
                  spritePath
@@ -290,8 +320,15 @@ drawGame gs
                         scaleY = meter2Pixel gs sy / solidObstacleSpriteHeightPx
                     in Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale scaleX scaleY img
                   Nothing -> basePic (greyN 0.6)
-           Hazard -> case Map.lookup hazardObstaclePath (gameImages gs) of
-                      Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale 0.07 0.07 img
+           Hazard ->
+             let spritePath = case Map.lookup (obstacleID o) (gameHazardAnimations gs) of
+                                Just anim | hazardAnimPlaying anim ->
+                                  let idx = min (length hazardAnimationPaths - 1) (hazardAnimFrame anim)
+                                  in hazardAnimationPaths !! idx
+                                _ -> hazardObstaclePath
+                 hazardScale = 0.07
+             in case Map.lookup spritePath (gameImages gs) of
+                      Just img -> Translate (meter2Pixel gs x) (meter2Pixel gs y) $ Scale hazardScale hazardScale img
                       Nothing -> let pulse = 0.5 + 0.5 * sin (t*4)
                                  in basePic (makeColor 1 0 0 (0.6 + 0.2*pulse))
            Bomb ->
@@ -406,65 +443,109 @@ drawGame gs
           in [label, wire]
 
     drawMenu :: Picture
-    drawMenu = Pictures [panel, title, rowsText, hints, drawButtons]
+    drawMenu = Pictures
+      [ menuBackground
+      , vignette
+      , glassPanel
+      , titleBlock
+      , subtitleBlock
+      , botCards
+      , drawButtons
+      ]
       where
         relative :: Scalar2D -> (Pixel, Pixel)
         relative (x, y) = (windowWidth/2 * x, windowHeight/2 * y)
-        textScale = min (windowWidth / 1000) (windowHeight / 700) * 0.25
+        baseScale = min (windowWidth / 1000) (windowHeight / 700)
+        headingScale = baseScale * 0.45
+        textScale = baseScale * 0.25
 
-        panel = Pictures [ Color (withAlpha 0.6 (greyN 0.2)) $ uncurry Translate (relative (0,0)) $ rectangleSolid (windowWidth*0.75) (windowHeight*0.75)
-                         , Color (withAlpha 0.9 white) $ uncurry Translate (relative (0,0)) $ rectangleWire (windowWidth*0.75) (windowHeight*0.75)
-                         ]
-        title = Color white $ (uncurry Translate) (relative (-0.25, 0.32)) $ Scale (textScale*1.1) (textScale*1.1) $ Text "CONFIGURACION DE BATALLA"
+        menuBackground = case Map.lookup menuBackgroundPath (gameImages gs) of
+          Just img ->
+            let scaleX = windowWidth / baseWindowWidth
+                scaleY = windowHeight / baseWindowHeight
+            in Scale scaleX scaleY img
+          Nothing -> Color (makeColor 0.05 0.08 0.12 1) $ rectangleSolid windowWidth windowHeight
 
-        drawButtons :: Picture
-        drawButtons = Pictures $ map drawButton (gameButtons gs)
+        vignette = Color (withAlpha 0.45 black) $ rectangleSolid windowWidth windowHeight
+
+        glassPanel = Pictures
+          [ Color (withAlpha 0.35 (makeColor 0.1 0.15 0.25 1)) $ rectangleSolid (windowWidth*0.82) (windowHeight*0.78)
+          , Color (withAlpha 0.6 (makeColor 0.8 0.9 1 1)) $ rectangleWire (windowWidth*0.82) (windowHeight*0.78)
+          ]
+
+        titleBlock = Translate (-windowWidth*0.34) (windowHeight*0.30) $
+          Scale headingScale headingScale $
+            Color (makeColor 0.92 0.97 1 1) $
+              Text "CENTRO DE OPERACIONES"
+
+        subtitleBlock = Translate (-windowWidth*0.34) (windowHeight*0.22) $
+          Scale (headingScale*0.65) (headingScale*0.65) $
+            Color (withAlpha 0.8 (makeColor 0.8 0.9 1 1)) $
+              Text "Configura el escuadrón antes de desplegar"
+
+        cardWidth = windowWidth * 0.7
+        cardHeight = windowHeight * 0.08
+        cardSpacing = windowHeight * 0.012
+        botCount = max 1 (length (gameBotConfigs gs))
+        maxSpacing = 0.50 / fromIntegral (max 3 botCount)
+        minSpacing = 0.12
+        spacing = max minSpacing maxSpacing
+        yTopRel = 0.12
+        rowRelPositions = [ (idx, yTopRel - fromIntegral idx * spacing) | idx <- [0 .. botCount - 1] ]
+        botCards = Pictures $ zipWith drawCard [0..] (gameBotConfigs gs)
+
+        drawCard idx (rid, beh) =
+          let yRel = snd (rowRelPositions !! idx)
+              y = snd (relative (0, yRel))
+              baseColor = makeColor 0.15 0.22 0.3 0.78
+              accentColor = case beh of
+                "aggressive" -> makeColor 0.95 0.33 0.33 0.9
+                "defensive"  -> makeColor 0.35 0.75 0.95 0.9
+                "sniper"     -> makeColor 0.6 0.95 0.55 0.9
+                _             -> makeColor 0.8 0.8 0.8 0.9
+              behaviorText = case beh of
+                "aggressive" -> "Agresivo"
+                "defensive"  -> "Defensivo"
+                "sniper"     -> "Francotirador"
+                _             -> capitalize beh
+              cardBase = Translate 0 y $ Pictures
+                [ Color baseColor $ rectangleSolid cardWidth cardHeight
+                , Color (withAlpha 0.7 accentColor) $ Translate (-cardWidth/2 + 12) 0 $ rectangleSolid 12 (cardHeight - 12)
+                , Color (withAlpha 0.35 white) $ rectangleWire (cardWidth) (cardHeight)
+                ]
+              label = Translate (-cardWidth/2 + 30) (y - cardHeight*0.18) $
+                        Scale (textScale*1.1) (textScale*1.1) $
+                        Color white $
+                        Text ("Tanque " ++ show rid)
+              behavior = Translate (-cardWidth/2 + 220) (y - cardHeight*0.18) $
+                          Scale (textScale*1.1) (textScale*1.1) $
+                          Color (makeColor 0.9 0.95 1 1) $
+                          Text behaviorText
+          in Pictures [cardBase, label, behavior]
+
+        drawButtons = Pictures $ map drawButton buttonInfo
           where
-            drawButton :: UIButton GameState -> Picture
-            drawButton button = (uncurry Translate) (relative (buttonPosition button)) $ 
-              Pictures [ Color (greyN 0.85) $ rectangleSolid rbw rbh
-                      , Color black $ rectangleWire rbw rbh
-                      , Translate (-rbw*0.12) (-rbh*0.15) $ Scale textScale textScale $ Text (buttonText button)
-                      ]
-              where
-                (rbw, rbh) = relative (buttonSize button)
+            buttonInfo = gameButtons gs
+            findRowIndex yRel = fmap fst $ find (\(_, ry) -> abs (ry - yRel) < 1e-5) rowRelPositions
+            drawButton button =
+              let (bxNorm, byNorm) = buttonPosition button
+                  (bw, bh) = relative (buttonSize button)
+                  rowIdx = if buttonText button `elem` ["<", ">"]
+                            then findRowIndex byNorm
+                            else Nothing
+                  by = case rowIdx of
+                         Just idx -> snd (relative (0, snd (rowRelPositions !! idx)))
+                         Nothing  -> snd (relative (0, byNorm))
+                  bx = fst (relative (bxNorm, 0))
+                  buttonColor = makeColor 0.1 0.6 0.85 0.95
+                  shadow = Color (withAlpha 0.4 black) $ Translate bx (by - 6) $ rectangleSolid bw bh
+                  body = Color buttonColor $ Translate bx by $ rectangleSolid bw bh
+                  border = Color (makeColor 0.9 0.97 1 0.9) $ Translate bx by $ rectangleWire bw bh
+                  label = Translate (bx - bw*0.18) (by - bh*0.2) $ Scale (textScale*0.9) (textScale*0.9) $ Color white $ Text (buttonText button)
+              in Pictures [shadow, body, border, label]
 
-        -- Pista inferior - movida más abajo y a la izquierda para que salga del panel
-        hints = (uncurry Translate) (relative (-0.38, -0.40)) $ Scale (textScale*0.65) (textScale*0.65) $ Color (greyN 0.75) $ Text "Usa < y > para cambiar tipo. Click JUGAR para iniciar."
-
-        -- Texto de filas: "Tanque i: <tipo>" - mejor espaciado y posiciones
-        rowsText = Pictures $ zipWith drawRow [0..] (gameBotConfigs gs)
-          where
-            drawRow :: Int -> (Int, String) -> Picture
-            drawRow idx (rid, beh) =
-              let n = max 1 (length (gameBotConfigs gs))
-                  -- Aumentar espaciado: usar más espacio vertical y mínimo entre filas
-                  maxSpacing = 0.50 / fromIntegral (max 3 n)  -- Espaciado máximo entre filas
-                  minSpacing = 0.12  -- Espaciado mínimo para evitar solapamiento
-                  spacing = max minSpacing maxSpacing
-                  yTop = 0.12  -- Empezar más abajo para dar más espacio
-                  y = yTop - fromIntegral idx * spacing
-                  labelTxt = "Tanque " ++ show rid ++ ":"
-                  behTxt = case beh of
-                            "aggressive" -> "Agresivo"
-                            "defensive"  -> "Defensivo"
-                            "sniper"     -> "Francotirador"
-                            _             -> capitalize beh
-                  -- Calcular offset vertical para centrar texto con los botones
-                  -- Los botones tienen altura 0.10 (relativo), el texto se renderiza desde su línea base
-                  -- Necesitamos subir el texto aproximadamente la mitad de su altura de línea para centrarlo
-                  buttonHeightPx = windowHeight/2 * 0.10  -- Altura del botón en píxeles
-                  textLineHeight = textScale * 0.85 * 25  -- Altura estimada de una línea de texto
-                  textOffsetY = textLineHeight * 0.4  -- Subir texto para alinearlo con centro del botón
-                  -- Layout: "Tanque X: Tipo" juntos a la izquierda, botones completamente a la derecha
-                  leftCol = Translate (fst (relative (-0.40, y))) (snd (relative (-0.40, y)) + textOffsetY) $ 
-                            Scale (textScale*0.85) (textScale*0.85) $ Color white $ Text labelTxt
-                  centerCol = Translate (fst (relative (-0.10, y))) (snd (relative (-0.10, y)) + textOffsetY) $ 
-                              Scale (textScale*0.9) (textScale*0.9) $ Color white $ Text behTxt
-              in Pictures [leftCol, centerCol]
-
-            capitalize [] = []
-            capitalize (c:cs) = toEnum (fromEnum (toUpper c)) : cs
+        capitalize [] = []
+        capitalize (c:cs) = toEnum (fromEnum (toUpper c)) : cs
 
     
 

@@ -11,6 +11,26 @@ import Geometry
 import UIButton
 import Data.Default
 
+data HazardAnimationState = HazardAnimationState
+  { hazardAnimFrame :: Int
+  , hazardAnimTimer :: Scalar
+  , hazardAnimCooldown :: Scalar
+  , hazardAnimPlaying :: Bool
+  } deriving (Show, Eq)
+
+data AirplaneDrop = AirplaneDrop
+  { airplaneDropX :: Scalar
+  , airplaneDropTargetY :: Scalar
+  } deriving (Show, Eq)
+
+data AirplaneState = AirplaneState
+  { airplaneX :: Scalar
+  , airplaneY :: Scalar
+  , airplaneSpeed :: Scalar
+  , airplaneEndX :: Scalar
+  , airplanePendingDrops :: [AirplaneDrop]
+  } deriving (Show, Eq)
+
 -- Tipo de datos para representar el estado del juego
 data GameState = GameState
   { 
@@ -19,6 +39,8 @@ data GameState = GameState
     gameExplosions :: Map.Map ID Explosion,
     gameObstacles :: Map.Map ID Obstacle,
     gameMissiles :: Map.Map ID Missile,
+    gameHazardAnimations :: Map.Map ID HazardAnimationState,
+    gameAirplane :: Maybe AirplaneState,
     -- Estadísticas temporales por robot durante un torneo
     gameStats :: Map.Map ID RobotStats,
   -- Tournament control
@@ -49,7 +71,8 @@ data GameState = GameState
     gameIsInMenu :: Bool,
     gameCollisionCooldown :: Scalar,
     gameMenuTimer :: Scalar,  -- Temporizador para inicio automático de torneo
-    gameMissileRainTriggered :: Bool,
+    gameAirplaneCooldown :: Scalar,
+    gameAirplanePassCount :: Int,
     gameTotalMissileCount :: Int
   } deriving (Show, Eq)
 
@@ -66,6 +89,8 @@ instance Default GameState where
       gameExplosions = Map.empty,
       gameObstacles = Map.empty,
       gameMissiles = Map.empty,
+      gameHazardAnimations = Map.empty,
+      gameAirplane = Nothing,
       gameBotConfigs = [],
       gameStageSize = (100, 50),
       gameImages = Map.empty,
@@ -92,7 +117,8 @@ instance Default GameState where
       gameSeed = 0,
       gameCollisionCooldown = 0,
       gameMenuTimer = 0,
-      gameMissileRainTriggered = False,
+      gameAirplaneCooldown = 0,
+      gameAirplanePassCount = 0,
       gameTotalMissileCount = 0
     }
 

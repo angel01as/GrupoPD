@@ -12,8 +12,9 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, isJust)
 import Data.Char (isSpace)
+import Data.List (sortOn)
 import Debug.Trace (trace)
 
 import Geometry
@@ -49,7 +50,10 @@ regenerateRobotsWithRandomPositions currentState initialState =
     , gameWindowSize = gameWindowSize currentState
     , gameSeed = gameSeed currentState
     , gameMissiles = Map.empty
-    , gameMissileRainTriggered = False
+    , gameHazardAnimations = Map.empty
+    , gameAirplane = Nothing
+    , gameAirplaneCooldown = 0
+    , gameAirplanePassCount = 0
     , gameTotalMissileCount = 0
   }
   where
@@ -140,7 +144,10 @@ autoStartTournament s =
        , gameObstacles = newObstacles
        , gameMenuTimer = 0
       , gameMissiles = Map.empty
-      , gameMissileRainTriggered = False
+      , gameHazardAnimations = Map.empty
+      , gameAirplane = Nothing
+      , gameAirplaneCooldown = 0
+      , gameAirplanePassCount = 0
       , gameTotalMissileCount = 0
        , gameStats = newStats
        }
@@ -419,20 +426,21 @@ updateGame dt oldState = finalState
     -- Ya no necesitamos handleMapEdge complejo, el rebote suave en clampToBounds es suficiente
     edgeState = phisicsState
 
-    missileSpawnState = spawnMissileRain edgeState
-    missileUpdatedState = updateMissiles deltaTime missileSpawnState
+    airSupportState = updateAirSupport deltaTime edgeState
+    missileUpdatedState = updateMissiles deltaTime airSupportState
+    hazardAnimState = updateHazardAnimations deltaTime missileUpdatedState
 
     -- Predicción de colisiones Robot–Obstáculo (pre-IA)
     robotObstaclePredictions =
       [ (r, o)
-      | r <- Map.elems (gameRobots missileUpdatedState)
-      , o <- Map.elems (gameObstacles missileUpdatedState)
+      | r <- Map.elems (gameRobots hazardAnimState)
+      , o <- Map.elems (gameObstacles hazardAnimState)
       , willCollideNextFrame r o 0.3
       ]
 
     predictedState = foldl
       (\acc (r, _o) -> acc { gameRobots = Map.adjust (AI.avoidObstacleSmartImmediate acc) (robotID r) (gameRobots acc) })
-      missileUpdatedState
+      hazardAnimState
       robotObstaclePredictions
 
     -- Colisiones básicas
@@ -562,7 +570,7 @@ updateGame dt oldState = finalState
                            else id
       in debugObstacles $ solidStep . hazardStep . detonateStep $ gs
       where
-        hazardDamage = 15 :: Float  -- Daño instantáneo por colisión (más que robot-robot que es 10 DPS)
+        hazardDamage = 30 :: Float  -- Daño instantáneo por colisión (más que robot-robot que es 10 DPS)
 
         -- Robot sólido: resolver penetración y deslizar suavemente alrededor del obstáculo
         solidStep :: GameState -> GameState
@@ -630,33 +638,25 @@ updateGame dt oldState = finalState
             applyHazard acc (r, o, _)
               | obstacleType o /= Hazard = acc
               | otherwise =
-                  let debugHazardMsg = if gameDebugInfo acc
+                  let accWithAnim = triggerHazardAnimation acc (obstacleID o)
+                      debugHazardMsg = if gameDebugInfo accWithAnim
                                        then trace ("Robot " ++ show (robotID r) ++ " chocó con HAZARD " ++ show (obstacleID o) ++ " - Aplicando " ++ show hazardDamage ++ " de daño!")
                                        else id
-                  in debugHazardMsg $ case Map.lookup (robotID r) (gameRobots acc) of
+                  in debugHazardMsg $ case Map.lookup (robotID r) (gameRobots accWithAnim) of
                     Just currentRobot ->
                       let energiaBefore = robotEnergy currentRobot
                           updatedRobot = currentRobot { robotEnergy = energiaBefore - hazardDamage }
                           energiaAfter = robotEnergy updatedRobot
-                          debugEnergy = if gameDebugInfo acc
+                          debugEnergy = if gameDebugInfo accWithAnim
                                         then trace ("Energía: " ++ show energiaBefore ++ " -> " ++ show energiaAfter)
                                         else id
-                          -- Crear efecto de colisión IGUAL que cuando impacta un proyectil
-                          collisionEffect = createExplosion (obstaclePosition o) maxRadiusProj explDamage maxTime (gameTotalExplosionCount acc)
-                          newExplosions = Map.insert (gameTotalExplosionCount acc) collisionEffect (gameExplosions acc)
                       in debugEnergy $ if isRobotAlive updatedRobot
-                         then acc { gameRobots = Map.insert (robotID r) updatedRobot (gameRobots acc)
-                                  , gameExplosions = newExplosions
-                                  , gameTotalExplosionCount = gameTotalExplosionCount acc + 1
-                                  }
-                         else let debugDeath = if gameDebugInfo acc
+                         then accWithAnim { gameRobots = Map.insert (robotID r) updatedRobot (gameRobots accWithAnim) }
+                         else let debugDeath = if gameDebugInfo accWithAnim
                                                then trace ("Robot " ++ show (robotID r) ++ " MURIÓ por Hazard!")
                                                else id
-                              in debugDeath $ acc { gameRobots = Map.delete (robotID r) (gameRobots acc)
-                                                  , gameExplosions = newExplosions
-                                                  , gameTotalExplosionCount = gameTotalExplosionCount acc + 1
-                                                  }  -- Eliminar si muere
-                    Nothing -> acc
+                              in debugDeath $ accWithAnim { gameRobots = Map.delete (robotID r) (gameRobots accWithAnim) }
+                    Nothing -> accWithAnim
 
         detonateStep :: GameState -> GameState
         detonateStep s0 = s3
@@ -734,49 +734,115 @@ updateGame dt oldState = finalState
                                     in accWithoutProjectile { gameObstacles = Map.insert (obstacleID currentObstacle) updatedObstacle (gameObstacles accWithoutProjectile) }
                        _ -> accWithoutProjectile
 
-    missileRainTriggerTime = 20 :: Float
-    missileRainCount = 10 :: Int
     missileFallSpeed = 45 :: Float
     missileExplosionRadius = 18 :: Float
-    missileExplosionDamage = 50 :: Float
+    missileExplosionDamage = 70 :: Float
     missileExplosionDuration = 0.9 :: Float
     missileSpawnMargin = 8 :: Float
+    hazardAnimationFrameDuration = 0.08 :: Float
+    hazardAnimationCooldownDuration = 0.6 :: Float
+    hazardAnimationFrameCount = 5 :: Int
+    airplanePassInterval = 5 :: Float
+    airplaneSpeedValue = 70 :: Float
+    airplaneVerticalOffset = 6 :: Float
+    airplaneHorizontalMargin = 12 :: Float
+    airplaneDropsPerPass = 5 :: Int
+    airplaneDropMargin = 6 :: Float
+    missileReleaseOffset = 2 :: Float
 
-    spawnMissileRain :: GameState -> GameState
-    spawnMissileRain state
-      | gameIsInMenu state = state
-      | gameMissileRainTriggered state = state
-      | gameTime state < missileRainTriggerTime = state
-      | otherwise = state
-          { gameMissiles = Map.union (gameMissiles state) newMissiles
-          , gameMissileRainTriggered = True
-          , gameTotalMissileCount = nextMissileID
-          }
+    updateAirSupport :: Float -> GameState -> GameState
+    updateAirSupport dt state
+      | gameIsInMenu state = state { gameAirplane = Nothing, gameAirplaneCooldown = airplanePassInterval }
+      | otherwise = spawnPlaneIfNeeded dt (advancePlane dt state)
+
+    advancePlane :: Float -> GameState -> GameState
+    advancePlane dt state =
+      case gameAirplane state of
+        Nothing -> state
+        Just plane ->
+          let oldX = airplaneX plane
+              newX = oldX + airplaneSpeed plane * dt
+              (dropsNow, remainingDrops) = collectDrops oldX newX (airplanePendingDrops plane)
+              stateAfterBombs = foldl (spawnPlaneMissile plane) state dropsNow
+          in if newX < airplaneEndX plane
+                then stateAfterBombs { gameAirplane = Just (plane { airplaneX = newX, airplanePendingDrops = remainingDrops }) }
+                else stateAfterBombs { gameAirplane = Nothing, gameAirplaneCooldown = airplanePassInterval }
+
+    collectDrops :: Float -> Float -> [AirplaneDrop] -> ([AirplaneDrop], [AirplaneDrop])
+    collectDrops oldX newX drops = (triggered, remaining)
       where
-        (stageW, stageH) = gameStageSize state
-        topY = stageH / 2 + missileSpawnMargin
-        minX = -stageW / 2 + missileSpawnMargin
-        maxX = stageW / 2 - missileSpawnMargin
+        (eligible, remaining) = span (\d -> airplaneDropX d <= newX) drops
+        triggered = filter (\d -> airplaneDropX d > oldX) eligible
+
+    spawnPlaneMissile :: AirplaneState -> GameState -> AirplaneDrop -> GameState
+    spawnPlaneMissile plane state dropInfo =
+      let newID = gameTotalMissileCount state
+          releaseY = airplaneY plane - missileReleaseOffset
+          missile = Missile
+            { missileID = newID
+            , missilePosition = (airplaneDropX dropInfo, releaseY)
+            , missileTargetY = airplaneDropTargetY dropInfo
+            , missileSpeed = missileFallSpeed
+            , missileDamage = missileExplosionDamage
+            , missileRadius = missileExplosionRadius
+            }
+      in state
+          { gameMissiles = Map.insert newID missile (gameMissiles state)
+          , gameTotalMissileCount = newID + 1
+          }
+
+    spawnPlaneIfNeeded :: Float -> GameState -> GameState
+    spawnPlaneIfNeeded dt state
+      | isJust (gameAirplane state) = state
+      | otherwise =
+          let newCooldown = max 0 (gameAirplaneCooldown state - dt)
+              cooled = state { gameAirplaneCooldown = newCooldown }
+          in if newCooldown <= 0
+                then launchAirplane cooled
+                else cooled
+
+    launchAirplane :: GameState -> GameState
+    launchAirplane state =
+      let (stageW, stageH) = gameStageSize state
+          y = stageH / 2 - airplaneVerticalOffset
+          startX = -stageW / 2 - airplaneHorizontalMargin
+          endX = stageW / 2 + airplaneHorizontalMargin
+          passIndex = gameAirplanePassCount state + 1
+          seedBase = deriveSeed (gameSeed state) passIndex
+          drops = buildAirplaneDrops stageW stageH seedBase
+          plane = AirplaneState
+            { airplaneX = startX
+            , airplaneY = y
+            , airplaneSpeed = airplaneSpeedValue
+            , airplaneEndX = endX
+            , airplanePendingDrops = drops
+            }
+      in state
+          { gameAirplane = Just plane
+          , gameAirplaneCooldown = airplanePassInterval
+          , gameAirplanePassCount = passIndex
+          }
+
+    buildAirplaneDrops :: Float -> Float -> Double -> [AirplaneDrop]
+    buildAirplaneDrops stageW stageH seedBase = sortOn airplaneDropX drops
+      where
+        segments = fromIntegral airplaneDropsPerPass
+        segmentWidth = stageW / segments
+        minX = -stageW / 2 + airplaneDropMargin
+        maxX = stageW / 2 - airplaneDropMargin
         minTargetY = -stageH / 2 + missileSpawnMargin
         maxTargetY = stageH / 2 - missileSpawnMargin * 2
-        timeBucket = floor (gameTime state * 17) :: Int
-        baseSeed = deriveSeed (gameSeed state) timeBucket
-        startID = gameTotalMissileCount state
-        (newMissiles, nextMissileID) = foldl buildMissile (Map.empty, startID) [0 .. missileRainCount - 1]
-
-        buildMissile (acc, curID) idx =
-          let seedLocal = baseSeed + fromIntegral idx * 13.37
-              xPos = pseudoRandomInRange seedLocal minX maxX
-              targetY = pseudoRandomInRange (seedLocal + 31.5) minTargetY maxTargetY
-              missile = Missile
-                { missileID = curID
-                , missilePosition = (xPos, topY)
-                , missileTargetY = targetY
-                , missileSpeed = missileFallSpeed
-                , missileDamage = missileExplosionDamage
-                , missileRadius = missileExplosionRadius
-                }
-          in (Map.insert curID missile acc, curID + 1)
+        mkDrop idx =
+          let idxf = fromIntegral idx :: Float
+              idxd = fromIntegral idx :: Double
+              baseCenter = -stageW / 2 + (idxf + 0.5) * segmentWidth
+              jitterSeed = seedBase + idxd * 13.137
+              jitter = pseudoRandomInRange jitterSeed (-segmentWidth * 0.3) (segmentWidth * 0.3)
+              finalX = max minX (min maxX (baseCenter + jitter))
+              targetSeed = seedBase + idxd * 29.77
+              targetY = pseudoRandomInRange targetSeed minTargetY maxTargetY
+          in AirplaneDrop finalX targetY
+        drops = [mkDrop idx | idx <- [0 .. airplaneDropsPerPass - 1]]
 
     updateMissiles :: Float -> GameState -> GameState
     updateMissiles dt' state
@@ -810,6 +876,42 @@ updateGame dt oldState = finalState
       where
         fracPart = frac (sin seed * 43758.5453)
         frac x = x - fromIntegral (floor x :: Int)
+
+    defaultHazardAnimState :: HazardAnimationState
+    defaultHazardAnimState = HazardAnimationState 0 0 0 False
+
+    updateHazardAnimations :: Float -> GameState -> GameState
+    updateHazardAnimations dt state = state
+      { gameHazardAnimations = Map.map updateEntry pruned }
+      where
+        pruned = Map.filterWithKey (\hid _ -> Map.member hid (gameObstacles state)) (gameHazardAnimations state)
+
+        updateEntry anim
+          | hazardAnimPlaying anim =
+              let timer' = hazardAnimTimer anim + dt
+              in if timer' >= hazardAnimationFrameDuration
+                    then let frame' = hazardAnimFrame anim + 1
+                         in if frame' >= hazardAnimationFrameCount
+                               then anim { hazardAnimFrame = 0
+                                         , hazardAnimTimer = 0
+                                         , hazardAnimPlaying = False
+                                         , hazardAnimCooldown = hazardAnimationCooldownDuration }
+                               else anim { hazardAnimFrame = frame'
+                                         , hazardAnimTimer = timer' - hazardAnimationFrameDuration }
+                    else anim { hazardAnimTimer = timer' }
+          | hazardAnimCooldown anim > 0 =
+              anim { hazardAnimCooldown = max 0 (hazardAnimCooldown anim - dt) }
+          | otherwise = anim
+
+    triggerHazardAnimation :: GameState -> ID -> GameState
+    triggerHazardAnimation state hazardID =
+      let anim = Map.findWithDefault defaultHazardAnimState hazardID (gameHazardAnimations state)
+      in if hazardAnimPlaying anim || hazardAnimCooldown anim > 0
+            then state
+            else state { gameHazardAnimations = Map.insert hazardID (anim { hazardAnimPlaying = True
+                                                                          , hazardAnimFrame = 0
+                                                                          , hazardAnimTimer = 0 })
+                                                (gameHazardAnimations state) }
 
     afterObstacles = handleProjectileObstacle (handleObstacleEffects collisionState)
 
